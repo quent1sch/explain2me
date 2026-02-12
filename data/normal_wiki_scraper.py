@@ -3,7 +3,7 @@ from bs4 import BeautifulSoup, Tag
 import requests
 import re
 from display_helpers import pretty_print_page
-from random import choice
+from random import choice 
 from concurrent.futures import ThreadPoolExecutor
 from data_helpers import load_cache, save_cache, merge_article_into_cache
 import time
