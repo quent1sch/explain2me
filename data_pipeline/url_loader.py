@@ -5,7 +5,6 @@ from typing import List
 def load_seed_urls(file_path: str) -> List[str]:
     path = Path(file_path)
 
-
     if not path.exists():
         return []
 

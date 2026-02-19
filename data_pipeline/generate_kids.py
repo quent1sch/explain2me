@@ -1,24 +1,17 @@
 # ------- IMPORT LIBRARIES -------
 
-import json
-from bs4 import BeautifulSoup, Tag
-import requests
-import re
 from concurrent.futures import ThreadPoolExecutor
 import time
 from datetime import datetime, timezone
-import os
-from urllib.parse import urlparse, unquote
-from typing import Union, List, Optional
 import sqlite3
-from random import sample, choices
-import pandas as pd
 from openai import OpenAI
 import random
 from tqdm import tqdm
 from functools import partial
 from typing import Tuple
 import logging
+
+logger = logging.getLogger(__name__)
 
 
 
@@ -69,7 +62,12 @@ def generate_kids_definition(
 
         except Exception as e:
             if attempt == max_retries - 1:
-                print(f"[FAILED] page \"{title}\" after {max_retries} attempts: {e}")
+                logger.warning(
+                    "Kids generation FAILED for page '%s' after %d attempts: %s",
+                    title,
+                    max_retries,
+                    e,
+                )
                 return None
 
             # exponential backoff
@@ -84,11 +82,14 @@ def generate_kids_definition(
 # Fetching function to fetch all pages content to feed the llm 
 
 def fetch4kidgen(db_path: str):
-	conn = sqlite3.connect(db_path)
-	cur = conn.cursor()
 
-	# fetching logic: use first simple definitions (lower nb token + less complex text for a simple model)
-	cur.execute("""
+    logger.debug("Fetching pages for kids generation from DB.")
+
+    conn = sqlite3.connect(db_path)
+    cur = conn.cursor()
+
+    # fetching logic: use first simple definitions (lower nb token + less complex text for a simple model)
+    cur.execute("""
 		SELECT
 			p.id,
 			p.title,
@@ -102,37 +103,55 @@ def fetch4kidgen(db_path: str):
 		WHERE (p.has_simple = 1 OR p.has_technical = 1) AND p.has_kids = 0;
 	""")
 
-	data4gen = cur.fetchall()
-	conn.close()
+    data4gen = cur.fetchall()
 
-	return data4gen
+    logger.info("Fetched %d pages for kids generation.", len(data4gen))
 
+    conn.close()
+    
+    return data4gen
 
 
 
 # STORING FUNCTION
 
 def store_kids(kid_defs: list, db_path: str) -> None:
-	"""
-    kid_defs: List
-			List of tuples. tuples: (page_id: int, kids_definition: str)
     """
-	conn = sqlite3.connect(db_path)
-	cur = conn.cursor()
-	for page_id, kid_def in kid_defs:
-		if kid_def:
-			cur.execute("""
-				INSERT OR REPLACE INTO definitions
-				(page_id, kind, content, source, created_at)
-				VALUES (?, 'kids', ?, 'LLM_generated', ?)
-			""", (page_id, kid_def, datetime.now(timezone.utc).isoformat()))
-			cur.execute("UPDATE pages SET has_kids = 1 WHERE id=?", (page_id,))
-	conn.commit()
-	conn.close()
-      
+    kid_defs: List of tuples (page_id: int, kids_definition: str)
+    """
+    try:
+        conn = sqlite3.connect(db_path)
+        cur = conn.cursor()
+
+        for page_id, kid_def in kid_defs:
+            if kid_def:
+                cur.execute(
+                    """
+                    INSERT OR REPLACE INTO definitions
+                    (page_id, kind, content, source, created_at)
+                    VALUES (?, 'kids', ?, 'LLM_generated', ?)
+                    """,
+                    (page_id, kid_def, datetime.now(timezone.utc).isoformat()),
+                )
+                cur.execute(
+                    "UPDATE pages SET has_kids = 1 WHERE id=?",
+                    (page_id,),
+                )
+
+        conn.commit()
+        logger.debug("Storing %d kids definitions in DB.", len(kid_defs))
+
+    except sqlite3.Error:
+        conn.rollback()
+        logger.exception("Failed storing kids definitions")
+        raise
+
+    finally: conn.close()
+    
+    
 
 
-# FULL FUNCTION
+# -------------------- FULL FUNCTION --------------------
 
 def generate_n_populate_kid_def(
     db_path: str,
@@ -144,7 +163,7 @@ def generate_n_populate_kid_def(
     data4gen = fetch4kidgen(db_path=db_path)
     
     if not data4gen:
-        print("No pages to generate kids definitions for - DB might be already fully populated")
+        logger.info("No pages to generate kids definitions for - DB might be already fully populated")
         return
 
     worker = partial(
@@ -153,7 +172,8 @@ def generate_n_populate_kid_def(
         max_input_tokens=max_input_tokens,
     )
 
-    print(f"Generating kids definitions for {len(data4gen)} pages...")
+    total_pages = len(data4gen)
+    logger.info("Generating kids definitions for %d pages.", total_pages)
 
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
         results = list(
@@ -167,8 +187,15 @@ def generate_n_populate_kid_def(
     # Remove failed generations
     results = [r for r in results if r is not None]
 
-    print(f"Storing {len(results)} successful generations...")
+    results_count = len(results)
+
+    logger.info(
+        "Kids generation complete — %d/%d successful.",
+        results_count,
+        total_pages,
+    )
 
     store_kids(kid_defs=results, db_path=db_path)
 
-    print("Done.")
+    logger.info("Stored %d kids definitions in DB.", results_count)
+

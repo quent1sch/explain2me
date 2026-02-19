@@ -2,6 +2,7 @@
 
 import logging
 import time
+from turtle import st
 
 from config import Settings
 from data_pipeline.db import init_db
@@ -54,6 +55,9 @@ def main():
 
 
     # ---------------- SCRAPING ----------------
+
+    start_scrape_time = time.time()
+
     try:
         # Scrape & Store wikipedia pages from the url list (from any simple/normal wiki page/category URL)
         urls = load_seed_urls("data_pipeline/wiki_urls")
@@ -72,6 +76,9 @@ def main():
 
 
     # ---------------- BACKFILL ----------------
+
+    start_backfill_time = time.time()
+
     try:
         # Backfill normal/simple wiki pages in db
         # i.e. try to scrape the normal (or simple) wiki page corresponding to the simple (or normal) wiki page in db.
@@ -83,6 +90,9 @@ def main():
 
 
     # ----------- GENERATE DEFs FOR KIDS -------------
+
+    start_llm4kid_time = time.time()
+
     try: 
         # Generate definition for 10yo kids from the existing wiki pages in db using an LLM
         generate_n_populate_kid_def(
@@ -94,11 +104,18 @@ def main():
 
     except Exception:
         logger.exception("Generation of definitions for kid audience stage failed")
+    
+    end_llm4kid_time = time.time()
 
     logger.info("Dataset pipeline completed successfully")
 
-    duration = time.time() - start_time
+    end_time = time.time()
+
+    duration = end_time - start_time
     logger.info("Total runtime: %.2f seconds", duration)
+    logger.info("Scraping runtime: %.2f seconds", start_backfill_time - start_scrape_time)
+    logger.info("Backfill runtime: %.2f seconds", start_llm4kid_time - start_backfill_time)
+    logger.info("Kid defs generation runtime: %.2f seconds", end_llm4kid_time - start_llm4kid_time)
 
 
 if __name__ == "__main__":
