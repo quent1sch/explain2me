@@ -1,28 +1,12 @@
 # ------- IMPORT LIBRARIES -------
 
-import json
-from bs4 import BeautifulSoup, Tag
-import requests
-import re
-from concurrent.futures import ThreadPoolExecutor
-import time
-from datetime import datetime, timezone
-import os
-from urllib.parse import urlparse, unquote
-from typing import Union, List, Optional
+from typing import List, Optional
 import sqlite3
-from random import sample, choices
-import pandas as pd
-from openai import OpenAI
-import random
-from tqdm import tqdm
-from functools import partial
-from typing import Tuple
 import logging
-
 from data_pipeline.scrape_wikipedia_global import scrape_wikipedia
 
 
+logger = logging.getLogger(__name__)
 
 
 
@@ -30,9 +14,6 @@ from data_pipeline.scrape_wikipedia_global import scrape_wikipedia
 # ----- with existing simple/technical page counterparts ------
 
 
-
-
-logger = logging.getLogger(__name__)
 
 def backfill_DB(
         db_path: str,
@@ -47,6 +28,8 @@ def backfill_DB(
     
     Returns list of successfully scraped pages.
     """
+
+    # ---------------------- Fetch missing pages ----------------------
     try:
         conn = sqlite3.connect(db_path)
         cur = conn.cursor()
@@ -68,6 +51,9 @@ def backfill_DB(
                          db_path)
         raise
     
+    
+    # -------------- Construct URL list ----------------------
+    
     urls_to_scrape = []
     
     for _, title, has_simple, has_technical in rows:
@@ -84,10 +70,10 @@ def backfill_DB(
         logger.info("No missing wiki versions found in  db_path='%s'.", db_path)
         return []
 
-    logger.info(
-        "Attempting to scrape %d missing versions...",
-        len(urls_to_scrape)
-    )
+    logger.info("Attempting to scrape %d missing versions...", len(urls_to_scrape))
+
+
+    # ---------------------- Scrape ---------------------------
 
     try:
         results = scrape_wikipedia(
@@ -95,11 +81,17 @@ def backfill_DB(
             db_path=db_path,
             cat_workers=cat_workers
         )
-        logger.info("Scraping completed.")
+
+        success_count = len([r for r in results if r is not None])
+
+        logger.info("Scraping completed: %d/%d pages successfully scraped.", 
+                    success_count,
+                    len(urls_to_scrape),
+                    )
         return results # some elem in list results might be None but scrape_wikipedia() does not store them
 
     except Exception:
-        logger.exception("Scraping failed in backfill_DB")
+        logger.exception("Scraping failed in backfill_DB for db_path='%s'", db_path)
         raise
 
 

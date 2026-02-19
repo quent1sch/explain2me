@@ -1,24 +1,11 @@
 # ------- IMPORT LIBRARIES -------
 
-import json
 from bs4 import BeautifulSoup, Tag
 import requests
 import re
-from concurrent.futures import ThreadPoolExecutor
-import time
-from datetime import datetime, timezone
-import os
-from urllib.parse import urlparse, unquote
-from typing import Union, List, Optional
-import sqlite3
-from random import sample, choices
-import pandas as pd
-from openai import OpenAI
-import random
-from tqdm import tqdm
-from functools import partial
-from typing import Tuple
 import logging
+
+logger = logging.getLogger(__name__)
 
 
 
@@ -146,9 +133,14 @@ def scrape_simple_wiki(url):
         res = requests.get(url, headers=headers, timeout=10)
         # Raises for 4xx/5xx responses
         res.raise_for_status()
+
+    except requests.Timeout as e:
+        logger.warning("Timeout fetching URL: %s", url)
+        raise
     except requests.RequestException as e:
-        # Network/environment-level failure: connection, timeout, HTTP error, invalid URL
-        raise RuntimeError(f"Failed to fetch Simple Wikipedia URL: {url}") from e
+        logger.error("HTTP/network error fetching URL: %s | %s", url, e)
+        raise
+
 
     soup = BeautifulSoup(res.text, "html.parser")
 
@@ -156,6 +148,7 @@ def scrape_simple_wiki(url):
     redirect_div = soup.find("div", class_="redirectMsg")
     if redirect_div and redirect_div.find("a"):
         redirect_url = "https://simple.wikipedia.org" + redirect_div.find("a")["href"]
+        logger.debug("Redirect detected: %s -> %s", url, redirect_url)
         return scrape_simple_wiki(redirect_url)
 
 
@@ -163,6 +156,7 @@ def scrape_simple_wiki(url):
     content = soup.find("div", class_="mw-parser-output")
     if content is None:
         # Page layout changed or empty page
+        logger.error("Main content div not found for URL: %s", url)
         raise ValueError(f"Main content not found for {url}")
 
     # --- Article title with fallback ---
@@ -218,6 +212,7 @@ def scrape_simple_wiki(url):
 
     # --- Ensure at least one section exists ---
     if not article_data["sections"]:
+        logger.warning("No sections extracted for URL: %s", url)
         raise ValueError(f"No sections found for {url}")
 
     return article_data

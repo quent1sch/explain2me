@@ -1,23 +1,8 @@
 # ------- IMPORT LIBRARIES -------
 
-import json
-from bs4 import BeautifulSoup, Tag
-import requests
-import re
 from concurrent.futures import ThreadPoolExecutor
-import time
-from datetime import datetime, timezone
-import os
-from urllib.parse import urlparse, unquote
 from typing import Union, List, Optional
 import sqlite3
-from random import sample, choices
-import pandas as pd
-from openai import OpenAI
-import random
-from tqdm import tqdm
-from functools import partial
-from typing import Tuple
 import logging
 
 from data_pipeline.helpers import get_category_pages, page_needs_scraping, store_page
@@ -25,7 +10,7 @@ from data_pipeline.scrape_simple_wiki import scrape_simple_wiki
 from data_pipeline.scrape_technical_wiki import scrape_normal_wiki
 
 
-
+logger = logging.getLogger(__name__)
 
 
 
@@ -70,9 +55,13 @@ def scrape_wikipedia(
     expanded_urls = []
     for url in urls:
         if "/wiki/Category:" in url:
-            categories = get_category_pages(url)
-            pages_urls = [page.get('url', None) for page in categories['pages']]
-            expanded_urls.extend(pages_urls)
+            try:
+                categories = get_category_pages(url)
+                pages_urls = [page.get('url') for page in categories.get('pages', []) if page.get('url')]
+                expanded_urls.extend(pages_urls)
+            except Exception as e:
+                logger.warning("Failed to expand category URL '%s': %s", url, e)
+
         else:
             expanded_urls.append(url)
     
@@ -83,11 +72,14 @@ def scrape_wikipedia(
         if db_path is None:
             urls_to_scrape.append(url)
         else:
-            if page_needs_scraping(url, db_path=db_path):
-                urls_to_scrape.append(url)
+            try:
+                if page_needs_scraping(url, db_path=db_path):
+                    urls_to_scrape.append(url)
+            except sqlite3.Error as e:
+                logger.error("Failed to check page '%s' in DB: %s", url, e)
      
     if not urls_to_scrape:
-        print("All pages already in DB. Nothing to scrape.")
+        logger.info("All pages already in DB. Nothing to scrape.")
         return []
     
     
@@ -111,7 +103,7 @@ def scrape_wikipedia(
             return result
 
         except RuntimeError:
-            print(f"[WARNING] Skipping URL due to fetch error: {url}")
+            logger.warning("Skipping URL due to fetch error: %s", url)
             return None
 
         finally: 

@@ -1,29 +1,12 @@
 # ------- IMPORT LIBRARIES -------
 
-import json
+
 from bs4 import BeautifulSoup, Tag
 import requests
 import re
-from concurrent.futures import ThreadPoolExecutor
-import time
-from datetime import datetime, timezone
-import os
-from urllib.parse import urlparse, unquote
-from typing import Union, List, Optional
-import sqlite3
-from random import sample, choices
-import pandas as pd
-from openai import OpenAI
-import random
-from tqdm import tqdm
-from functools import partial
-from typing import Tuple
 import logging
 
-from data_pipeline.helpers import simple2normalwiki_url, normal2simplewiki_url
-
-
-
+logger = logging.getLogger(__name__)
 
 
 # ----------------------------------------
@@ -89,26 +72,38 @@ def is_ignored_tech(el: Tag) -> bool:
 
 
 # ---------------- MAIN SCRAPER ----------------
-def scrape_normal_wiki(url: str) -> dict:
+def scrape_normal_wiki_batch_unsafe(url: str) -> dict:
     headers = {"User-Agent": "ReverseMentorBot/0.1"}
+
+    logger.info("Starting scrape_normal_wiki for URL: %s", url)
     
     try:
          res = requests.get(url, headers=headers, timeout=10)
          # Raise an HTTPError for 4xx/5xx responses (e.g., 404, 500, 429), ensuring failed HTTP responses are treated as errors.
          res.raise_for_status()
+         logger.info("Fetched URL successfully: %s", url)
 		
+    # catches all request-related failures: connection errors, timeouts, invalid URLs, and HTTP errors raised by raise_for_status()
+	# i.e. network/environment-level failures, not parsing or scraper-logic errors.    
+    except requests.Timeout:
+        logger.warning("Timeout fetching URL: %s", url)
+        raise
+    except requests.ConnectionError:
+        logger.warning("Connection error fetching URL: %s", url)
+        raise
+    except requests.HTTPError as e:
+        logger.error("HTTP error (%d) for URL: %s", res.status_code, url)
+        raise
     except requests.RequestException as e:
-        # catches all request-related failures: connection errors, timeouts, invalid URLs, and HTTP errors raised by raise_for_status()
-		# i.e. network/environment-level failures, not parsing or scraper-logic errors.
-        raise RuntimeError(f"Failed to fetch URL: {url}") from e
+        logger.exception("Unknown requests error for URL: %s", url)
+        raise
 
 
     soup = BeautifulSoup(res.text, "html.parser")
-
-
     content = soup.find("div", id="mw-content-text")
     
     if content is None:
+        logger.error("Content div not found for URL: %s", url)
         raise ValueError(f"Content div not found for {url}")
 
     sections = []
@@ -136,6 +131,7 @@ def scrape_normal_wiki(url: str) -> dict:
         # ---------- CONTENT ----------
         text = clean_paragraph_tech(el)
         if not text:
+            logger.debug("Skipping empty element at %s", el)
             continue
 
         if current is None:
@@ -160,7 +156,15 @@ def scrape_normal_wiki(url: str) -> dict:
         href = cat.get("href")
         if href and href.startswith("/wiki/"):
             category_urls.append("https://en.wikipedia.org" + href)
+        else:
+            logger.debug("Skipping non-standard category href: %s", href)
+    
 
+    logger.info("Scraped '%s' successfully: %d sections, %d categories",
+                title or "Unknown",
+                len(sections),
+                len(categories)
+            )
 
 
     return {
@@ -171,3 +175,14 @@ def scrape_normal_wiki(url: str) -> dict:
         "category_urls": category_urls,
     }
 
+
+
+def scrape_normal_wiki(url: str) -> dict | None:
+    # prevent one URL failure from crashing a batch (useful for ThreadPoolExecutor)
+    # Failed URLs return None without stopping the batch.
+
+    try:
+        return scrape_normal_wiki_batch_unsafe(url)
+    except Exception as e:
+        logger.exception("Failed to scrape URL: %s", url)
+        return None
