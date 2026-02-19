@@ -7,7 +7,7 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-
+ 
 
 # -------------------------------------------------------------------------------------
 #
@@ -59,7 +59,7 @@ def clean_paragraph_simple(el: Tag):
     text = re.sub(r"\s+", " ", text)
     text = re.sub(r"\s+([.,;:!?])", r"\1", text)
     return text.strip()
-
+ 
 
 # --- Recursive content iterator ---
 def iter_content_elements(el):
@@ -131,15 +131,21 @@ def scrape_simple_wiki(url):
     # --- Fetch page with network error handling ---
     try:
         res = requests.get(url, headers=headers, timeout=10)
+
+        if res.status_code == 404:
+            logger.info("Simple Wiki page not found (404): %s", url)
+            return None
+        
         # Raises for 4xx/5xx responses
         res.raise_for_status()
 
     except requests.Timeout as e:
         logger.warning("Timeout fetching URL: %s", url)
-        raise
+        return None
+    
     except requests.RequestException as e:
         logger.error("HTTP/network error fetching URL: %s | %s", url, e)
-        raise
+        return None
 
 
     soup = BeautifulSoup(res.text, "html.parser")
@@ -156,8 +162,8 @@ def scrape_simple_wiki(url):
     content = soup.find("div", class_="mw-parser-output")
     if content is None:
         # Page layout changed or empty page
-        logger.error("Main content div not found for URL: %s", url)
-        raise ValueError(f"Main content not found for {url}")
+        logger.warning("Main content div not found for URL: %s", url)
+        return None
 
     # --- Article title with fallback ---
     title_tag = soup.find("h1", id="firstHeading")
@@ -212,7 +218,7 @@ def scrape_simple_wiki(url):
 
     # --- Ensure at least one section exists ---
     if not article_data["sections"]:
-        logger.warning("No sections extracted for URL: %s", url)
-        raise ValueError(f"No sections found for {url}")
+        logger.info("No sections extracted for URL: %s", url)
+        return None
 
     return article_data

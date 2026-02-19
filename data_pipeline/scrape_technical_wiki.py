@@ -67,44 +67,52 @@ def is_ignored_tech(el: Tag) -> bool:
             return True
     return False
 
-
+ 
 
 
 
 # ---------------- MAIN SCRAPER ----------------
-def scrape_normal_wiki_batch_unsafe(url: str) -> dict:
+def scrape_normal_wiki(url: str) -> dict | None:
     headers = {"User-Agent": "ReverseMentorBot/0.1"}
 
     logger.info("Starting scrape_normal_wiki for URL: %s", url)
     
     try:
-         res = requests.get(url, headers=headers, timeout=10)
-         # Raise an HTTPError for 4xx/5xx responses (e.g., 404, 500, 429), ensuring failed HTTP responses are treated as errors.
-         res.raise_for_status()
-         logger.info("Fetched URL successfully: %s", url)
+        res = requests.get(url, headers=headers, timeout=10)
+        if res.status_code == 404:
+            logger.info("Technical Wiki page not found (404): %s", url)
+            return None
+
+        # --- Other HTTP errors (500, 403, 429, etc.) ---
+        if 400 <= res.status_code < 600:
+            logger.warning(
+                "HTTP error (%d) for URL: %s",
+                res.status_code,
+                url
+            )
+            return None         
+
+        logger.info("Fetched URL successfully: %s", url)
 		
     # catches all request-related failures: connection errors, timeouts, invalid URLs, and HTTP errors raised by raise_for_status()
 	# i.e. network/environment-level failures, not parsing or scraper-logic errors.    
     except requests.Timeout:
         logger.warning("Timeout fetching URL: %s", url)
-        raise
+        return None
     except requests.ConnectionError:
         logger.warning("Connection error fetching URL: %s", url)
-        raise
-    except requests.HTTPError as e:
-        logger.error("HTTP error (%d) for URL: %s", res.status_code, url)
-        raise
+        return None
     except requests.RequestException as e:
         logger.exception("Unknown requests error for URL: %s", url)
-        raise
+        return None
 
 
     soup = BeautifulSoup(res.text, "html.parser")
     content = soup.find("div", id="mw-content-text")
     
     if content is None:
-        logger.error("Content div not found for URL: %s", url)
-        raise ValueError(f"Content div not found for {url}")
+        logger.warning("Content div not found for URL: %s", url)
+        return None
 
     sections = []
     intro = None
@@ -141,6 +149,10 @@ def scrape_normal_wiki_batch_unsafe(url: str) -> dict:
             intro["paragraphs"].append(text)
         else:
             current["paragraphs"].append(text)
+     
+    if not sections:
+        logger.info("No sections extracted for URL: %s", url)
+        return None
 
     title_tag = soup.find("h1")
     title = title_tag.get_text(strip=True) if title_tag else None
@@ -177,12 +189,3 @@ def scrape_normal_wiki_batch_unsafe(url: str) -> dict:
 
 
 
-def scrape_normal_wiki(url: str) -> dict | None:
-    # prevent one URL failure from crashing a batch (useful for ThreadPoolExecutor)
-    # Failed URLs return None without stopping the batch.
-
-    try:
-        return scrape_normal_wiki_batch_unsafe(url)
-    except Exception as e:
-        logger.exception("Failed to scrape URL: %s", url)
-        return None

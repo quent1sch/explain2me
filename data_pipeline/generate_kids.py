@@ -11,6 +11,7 @@ from functools import partial
 from typing import Tuple
 import logging
 
+
 logger = logging.getLogger(__name__) 
 
 
@@ -153,49 +154,92 @@ def store_kids(kid_defs: list, db_path: str) -> None:
 
 # -------------------- FULL FUNCTION --------------------
 
+
 def generate_n_populate_kid_def(
     db_path: str,
-    client: OpenAI,
+    client,
     max_input_tokens: int,
     max_workers: int = 5,
-    ) -> None:
+    max_batch_retries: int = 10,
+    batch_retry_wait: int = 20,  # seconds
+) -> None:
+    """
+    Generate 'kids' definitions from existing wiki pages in DB using an LLM.
+    Implements per-page exponential backoff AND batch-level retries for intermittent free-tier quota issues.
 
-    data4gen = fetch4kidgen(db_path=db_path)
-    
-    if not data4gen:
+    Stores successes immediately, retries only remaining pages.
+    """
+
+    # Fetch pages that still need kid definitions
+    remaining_pages = fetch4kidgen(db_path=db_path)
+    total_pages = len(remaining_pages)
+
+    if not remaining_pages:
         logger.info("No pages to generate kids definitions for - DB might be already fully populated")
         return
 
-    worker = partial(
-        generate_kids_definition,
-        client=client,
-        max_input_tokens=max_input_tokens,
-    )
+    logger.info("Starting kids definition generation for %d pages", total_pages)
 
-    total_pages = len(data4gen)
-    logger.info("Generating kids definitions for %d pages.", total_pages)
+    # Batch-level retries
+    for batch_attempt in range(max_batch_retries):
+        if not remaining_pages:
+            logger.info("All pages generated successfully.")
+            break
 
-    with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        results = list(
-            tqdm(
-                executor.map(worker, data4gen),
-                total=len(data4gen),
-                desc="Generating"
-            )
+        logger.info("Batch attempt %d/%d — %d pages remaining", 
+                    batch_attempt + 1, max_batch_retries, len(remaining_pages))
+
+        worker = partial(
+            generate_kids_definition,
+            client=client,
+            max_input_tokens=max_input_tokens,
         )
 
-    # Remove failed generations
-    results = [r for r in results if r is not None]
+        results = []
 
-    results_count = len(results)
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            batch_results = list(
+                tqdm(
+                    executor.map(worker, remaining_pages),
+                    total=len(remaining_pages),
+                    desc=f"Batch {batch_attempt + 1} generating"
+                )
+            )
 
-    logger.info(
-        "Kids generation complete — %d/%d successful.",
-        results_count,
-        total_pages,
-    )
+        # Filter out failed generations (None)
+        results = [r for r in batch_results if r is not None]
 
-    store_kids(kid_defs=results, db_path=db_path)
+        # Store successful generations immediately
+        if results:
+            store_kids(results, db_path=db_path)
+            logger.info("Stored %d kids definitions in DB this batch", len(results))
 
-    logger.info("Stored %d kids definitions in DB.", results_count)
+        # Determine remaining pages that still need generation
+        successful_ids = {r[0] for r in results}
+        remaining_pages = [p for p in remaining_pages if p[0] not in successful_ids]
 
+        if remaining_pages:
+            logger.warning(
+                "%d pages failed this batch.",
+                len(remaining_pages)
+            )
+            # Only sleep if another batch retry is coming
+            if batch_attempt < max_batch_retries - 1:
+                logger.info(
+                    "Batch n°%d done, will retry after %ds",
+                    batch_attempt + 1,
+                    batch_retry_wait
+                )
+                time.sleep(batch_retry_wait)
+
+
+    # Final report
+    if remaining_pages:
+        logger.error(
+            "Kids definition generation incomplete: %d/%d pages failed after %d batch retries",
+            len(remaining_pages),
+            total_pages,
+            max_batch_retries
+        )
+    else:
+        logger.info("Kids definition generation complete: all %d pages generated successfully", total_pages)

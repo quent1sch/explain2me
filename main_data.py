@@ -87,7 +87,7 @@ def main():
     except Exception:
         logger.exception("Backfill stage failed — continuing")
     
-
+ 
 
     # ----------- GENERATE DEFs FOR KIDS -------------
 
@@ -116,6 +116,7 @@ def main():
     logger.info("Scraping runtime: %.2f seconds", start_backfill_time - start_scrape_time)
     logger.info("Backfill runtime: %.2f seconds", start_llm4kid_time - start_backfill_time)
     logger.info("Kid defs generation runtime: %.2f seconds", end_llm4kid_time - start_llm4kid_time)
+
 
 
 if __name__ == "__main__":
