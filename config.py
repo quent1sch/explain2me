@@ -23,9 +23,6 @@ class Settings:
     def get_db_path() -> str:
         return str(Settings.DB_PATH)
 
-    # @staticmethod
-    # def get_db_path() -> str:
-    #     return os.path.join(os.getcwd(), Settings.DB_NAME)
 
     @staticmethod
     def create_client() -> OpenAI:

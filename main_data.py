@@ -21,7 +21,7 @@ def configure_logging():
     format="%(asctime)s | %(levelname)s | %(name)s | %(funcName)s:%(lineno)d | %(message)s",
     handlers=[
         logging.StreamHandler(),
-        logging.FileHandler("toy_test_log.log")
+        logging.FileHandler("data_pipeline_logs.log")
     ],
     force=True
 )

@@ -160,7 +160,7 @@ def generate_n_populate_kid_def(
     client,
     max_input_tokens: int,
     max_workers: int = 5,
-    max_batch_retries: int = 10,
+    max_batch_retries: int = 20,
     batch_retry_wait: int = 20,  # seconds
 ) -> None:
     """

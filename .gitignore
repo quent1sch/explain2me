@@ -212,6 +212,7 @@ simple_wiki_raw_data.json
 normal_wiki_raw_data.json
 merged_wiki_data.json
 full_wiki_data.json
+training_data.json
 
 # db
 wikipedia.db
