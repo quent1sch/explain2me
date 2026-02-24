@@ -2,7 +2,6 @@
 
 import logging
 import time
-from turtle import st
 
 from config import Settings
 from data_pipeline.db import init_db
@@ -10,6 +9,8 @@ from data_pipeline.backfill import backfill_DB
 from data_pipeline.generate_kids import generate_n_populate_kid_def
 from data_pipeline.scrape_wikipedia_global import scrape_wikipedia
 from data_pipeline.url_loader import load_seed_urls
+from data_pipeline.lora_train_data_formatting import build_lora_training_dataset, save_data
+
 
 
 
@@ -105,7 +106,29 @@ def main():
     except Exception:
         logger.exception("Generation of definitions for kid audience stage failed")
     
-    end_llm4kid_time = time.time()
+    
+
+
+    # ----------- FORMAT & SAVE DATA FOR LORA ADAPTER TRAINING -------------
+
+    start_lora_train_data_formatting_time = time.time()
+
+    try:
+        dataset = build_lora_training_dataset(db_path)
+        if dataset:
+            save_data(dataset, "data_pipeline/training_data.json")
+            logging.info(f"LoRA training dataset saved successfully with {len(dataset)} items.")
+        else:
+            logging.warning("No dataset generated; nothing to save.")
+
+    except Exception as e:
+        logging.error(f"Failed to build or save LoRA training dataset: {e}", exc_info=True)
+
+
+
+
+    # ----------- DATA PIPELINE COMPLETED -----------
+
 
     logger.info("Dataset pipeline completed successfully")
 
@@ -115,7 +138,8 @@ def main():
     logger.info("Total runtime: %.2f seconds", duration)
     logger.info("Scraping runtime: %.2f seconds", start_backfill_time - start_scrape_time)
     logger.info("Backfill runtime: %.2f seconds", start_llm4kid_time - start_backfill_time)
-    logger.info("Kid defs generation runtime: %.2f seconds", end_llm4kid_time - start_llm4kid_time)
+    logger.info("Kid defs generation runtime: %.2f seconds", start_lora_train_data_formatting_time - start_llm4kid_time)
+    logger.info("Data formatting for LoRA training runtime: %.2f seconds", end_time - start_lora_train_data_formatting_time)
 
 
 
