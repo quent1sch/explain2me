@@ -4,7 +4,8 @@ training:
   output_dir: ./lora_model
   epochs: 6
   learning_rate: 2e-4
-  per_device_batch_size: 2
+  per_device_batch_size: 1
+  per_device_eval_batch_size: 1
   gradient_accumulation_steps: 4
   weight_decay: 0.01
 
@@ -14,7 +15,7 @@ lora:
   dropout: 0.05
 
 hub:
-  repo_id: your-username/llama-3.1-8b-explain2me-lora
+  repo_id: quent1sch/llama-3.1-8b-explain2me-lora
 
 wandb:
   project: explain2me-qlora
