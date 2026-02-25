@@ -220,6 +220,9 @@ WikipediaOne.db
 
 # ipynb
 trying_stuff.ipynb
+lora_training.ipynb
+lora_training.py
 
 # vscode
 .vscode
+

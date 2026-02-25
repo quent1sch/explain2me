@@ -1,0 +1,20 @@
+model_id: meta-llama/Meta-Llama-3.1-8B-Instruct
+
+training:
+  output_dir: ./lora_model
+  epochs: 6
+  learning_rate: 2e-4
+  per_device_batch_size: 2
+  gradient_accumulation_steps: 4
+  weight_decay: 0.01
+
+lora:
+  r: 16
+  alpha: 32
+  dropout: 0.05
+
+hub:
+  repo_id: your-username/llama-3.1-8b-explain2me-lora
+
+wandb:
+  project: explain2me-qlora

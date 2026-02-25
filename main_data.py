@@ -15,6 +15,8 @@ from data_pipeline.lora_train_data_formatting import build_lora_training_dataset
 
 
 
+
+
 # ------- LOG CONFIG ----------
 def configure_logging():
     logging.basicConfig(
@@ -116,8 +118,15 @@ def main():
     try:
         dataset = build_lora_training_dataset(db_path)
         if dataset:
-            save_data(dataset, "data_pipeline/training_data.json")
+            save_data(dataset, Settings.get_training_data_path())
             logging.info(f"LoRA training dataset saved successfully with {len(dataset)} items.")
+
+            # ---------------- PUSH TO HUB -----------------
+            try:
+                Settings.push_dataset_to_hub()
+            except Exception as e:
+                logging.error(f"Failed to push dataset to Hugging Face Hub: {e}", exc_info=True)
+
         else:
             logging.warning("No dataset generated; nothing to save.")
 
@@ -139,9 +148,10 @@ def main():
     logger.info("Scraping runtime: %.2f seconds", start_backfill_time - start_scrape_time)
     logger.info("Backfill runtime: %.2f seconds", start_llm4kid_time - start_backfill_time)
     logger.info("Kid defs generation runtime: %.2f seconds", start_lora_train_data_formatting_time - start_llm4kid_time)
-    logger.info("Data formatting for LoRA training runtime: %.2f seconds", end_time - start_lora_train_data_formatting_time)
+    logger.info("Data formatting for LoRA training (+ saving locally and to HF hub) runtime: %.2f seconds", end_time - start_lora_train_data_formatting_time)
 
 
 
 if __name__ == "__main__":
     main()
+
