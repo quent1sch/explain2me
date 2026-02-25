@@ -15,17 +15,24 @@ from huggingface_hub import login
 
 
 # ---------- Load Config ----------
-with open("training/config.yaml", "r") as f:
+with open("training_pipeline/config.yaml", "r") as f:
     config = yaml.safe_load(f)
 
 model_id = config["model_id"]
 
 # ---------- Load Dataset ----------
+# dataset = load_dataset(
+#     "json",
+#     data_files="data_pipeline/training_data.json",
+#     split="train",
+# )
+
+hf_dataset_repo = "quent1sch/explain2me"
 dataset = load_dataset(
-    "json",
-    data_files="data_pipeline/training_data.json",
-    split="train",
+    hf_dataset_repo,
+    split="train"
 )
+
 
 dataset = dataset.remove_columns(["page_id"])
 
