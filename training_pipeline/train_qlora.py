@@ -1,6 +1,8 @@
+import os
 import torch
 import yaml
 import wandb
+
 from datasets import load_dataset
 from transformers import (
     AutoModelForCausalLM,
@@ -10,7 +12,8 @@ from transformers import (
 )
 from peft import LoraConfig, prepare_model_for_kbit_training
 from trl import SFTTrainer
-from huggingface_hub import login
+from huggingface_hub import snapshot_download
+from transformers.trainer_utils import get_last_checkpoint
 
 
 
@@ -19,13 +22,16 @@ with open("training_pipeline/config.yaml", "r") as f:
     config = yaml.safe_load(f)
 
 model_id = config["model_id"]
+train_cfg = config["training"]
+lora_cfg = config["lora"]
+repo_id = config["hub"]["repo_id"]
+
+# ---------- W&B Initialize ----------
+wandb.init(project=config["wandb"]["project"])
+
+
 
 # ---------- Load Dataset ----------
-# dataset = load_dataset(
-#     "json",
-#     data_files="data_pipeline/training_data.json",
-#     split="train",
-# )
 
 hf_dataset_repo = "quent1sch/explain2me"
 dataset = load_dataset(
@@ -33,8 +39,8 @@ dataset = load_dataset(
     split="train"
 )
 
-
-dataset = dataset.remove_columns(["page_id"])
+if "page_id" in dataset.column_names:
+    dataset = dataset.remove_columns(["page_id"])
 
 
 # -------- Train / Test Split --------
@@ -58,8 +64,7 @@ test_ds = train_test["test"]
 # ---------- Login (Colab only if needed) ----------
 # login()  
 
-# ---------- W&B ----------
-wandb.init(project=config["wandb"]["project"])
+
 
 # ---------- Quantization Config ----------
 bnb_config = BitsAndBytesConfig(
@@ -69,7 +74,7 @@ bnb_config = BitsAndBytesConfig(
     bnb_4bit_use_double_quant=True,
 )
 
-# ---------- Load Model ----------
+# ---------- Load Model & Tokenizer ----------
 model = AutoModelForCausalLM.from_pretrained(
     model_id,
     quantization_config=bnb_config,
@@ -80,6 +85,7 @@ tokenizer = AutoTokenizer.from_pretrained(model_id)
 tokenizer.pad_token = tokenizer.eos_token
 
 model = prepare_model_for_kbit_training(model)
+
 
 # ---------- LoRA Config ----------
 lora_cfg = config["lora"]
@@ -93,8 +99,8 @@ peft_config = LoraConfig(
     task_type="CAUSAL_LM",
 )
 
+
 # ---------- Training Arguments ----------
-train_cfg = config["training"]
 
 args = TrainingArguments(
     output_dir=train_cfg["output_dir"],
@@ -108,14 +114,15 @@ args = TrainingArguments(
     logging_steps=5,
     # evaluation_strategy="steps",
     eval_strategy="steps",
-    eval_steps=70,
+    eval_steps=train_cfg["eval_steps"],
     save_strategy="steps",
-    save_steps=70,
+    save_steps=train_cfg["save_steps"],
     save_total_limit=2,
     load_best_model_at_end=True,
     report_to="wandb",
     push_to_hub=True,
-    hub_model_id=config["hub"]["repo_id"],
+    hub_model_id=repo_id,
+    hub_strategy="every_save",
     disable_tqdm=False,
 )
 
@@ -137,7 +144,29 @@ trainer = SFTTrainer(
     formatting_func=formatting_func,
 ) 
 
-trainer.train()
+# --------- Conditional Resume from HF Hub Checkpoint ---------
+
+resume_checkpoint = None
+
+try:
+    print("Checking Hugging Face Hub for existing checkpoints.")
+    local_repo_path = snapshot_download(repo_id)
+    last_checkpoint = get_last_checkpoint(local_repo_path)
+
+    if last_checkpoint is not None:
+        print(f"Resuming from last checkpoint: {last_checkpoint}")
+        resume_checkpoint = last_checkpoint
+    else:
+        print("No checkpoint found. Train from start.")
+
+except Exception as e:
+    print("Could not detect Hub checkpoint. Starting fresh.")
+    print(e)
+
+# Auto resume safe:
+# trainer.train()
+trainer.train(resume_from_checkpoint=resume_checkpoint)
+
 
 # ---------- Final Push ----------
 trainer.push_to_hub()
@@ -151,5 +180,15 @@ wandb.finish()
 test_metrics = trainer.evaluate(test_ds)
 
 import json
+os.makedirs("results", exist_ok=True)
 with open("results/test_metrics.json", "w") as f:
     json.dump(test_metrics, f, indent=2)
+
+
+
+
+
+
+
+
+

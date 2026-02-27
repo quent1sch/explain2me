@@ -8,6 +8,8 @@ training:
   per_device_eval_batch_size: 1
   gradient_accumulation_steps: 4
   weight_decay: 0.01
+  save_steps: 70
+  eval_steps: 70
 
 lora:
   r: 16
@@ -16,6 +18,7 @@ lora:
 
 hub:
   repo_id: quent1sch/llama-3.1-8b-explain2me-lora
+  strategy: every_save
 
 wandb:
   project: explain2me-qlora
