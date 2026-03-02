@@ -226,3 +226,6 @@ lora_training.py
 # vscode
 .vscode
 
+# venv
+venv_explain2me/
+
