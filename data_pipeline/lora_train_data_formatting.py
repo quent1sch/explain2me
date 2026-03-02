@@ -4,15 +4,20 @@ from typing import List, Dict
 import logging
 import sys
 from pathlib import Path
-from config import Settings
 import json
 from pydantic import BaseModel, ValidationError
 
 
-# Add parent folder to search path to import from config.py
-parent_dir = Path().resolve().parent
-print(parent_dir)
-sys.path.append(str(parent_dir))
+# Add project root to sys.path so config.py can be imported
+project_root = Path().resolve()
+
+while not (project_root / "config.py").exists():
+    project_root = project_root.parent
+
+sys.path.append(str(project_root))
+print("Project root:", project_root)
+
+from config import Settings
 
 
 SYSTEM_PROMPT = (
