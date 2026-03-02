@@ -11,7 +11,7 @@ The model generates a clear, audience-aware explanation without requiring struct
 
 ## Project Objective
 
-Explain2Me aims to make knowledge accessible and tailored:
+**Explain2Me** aims to make knowledge accessible and tailored:
 
 - Learns to simplify or enrich explanations depending on user-provided context
 
