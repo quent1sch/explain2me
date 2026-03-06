@@ -122,7 +122,8 @@ args = TrainingArguments(
     report_to="wandb",
     push_to_hub=True,
     hub_model_id=repo_id,
-    hub_strategy="every_save",
+    hub_strategy="checkpoint", # required for resume training: 
+                               # pushes checkpoint folders (not just model files like "every_save")
     disable_tqdm=False,
 )
 
