@@ -21,4 +21,9 @@ hub:
   strategy: every_save
 
 wandb:
-  project: explain2me-qlora
+  project: explain2me-qlora  
+  # optional: put run id here if you want to force resume 
+  #           from specific run, else just run_id: null
+  # run_id can be obtained from a wandb run overview -> in Run path
+  run_id: h57q6byd
+   

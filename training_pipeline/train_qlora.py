@@ -14,6 +14,7 @@ from peft import LoraConfig, prepare_model_for_kbit_training
 from trl import SFTTrainer
 from huggingface_hub import snapshot_download
 from transformers.trainer_utils import get_last_checkpoint
+from training_helpers import init_wandb
 
 
 
@@ -25,9 +26,6 @@ model_id = config["model_id"]
 train_cfg = config["training"]
 lora_cfg = config["lora"]
 repo_id = config["hub"]["repo_id"]
-
-# ---------- W&B Initialize ----------
-wandb.init(project=config["wandb"]["project"])
 
 
 
@@ -151,8 +149,8 @@ resume_checkpoint = None
 
 try:
     print("Checking Hugging Face Hub for existing checkpoints.")
-    local_repo_path = snapshot_download(repo_id)
-    last_checkpoint = get_last_checkpoint(local_repo_path)
+    repo_path = snapshot_download(repo_id)
+    last_checkpoint = get_last_checkpoint(repo_path)
 
     if last_checkpoint is not None:
         print(f"Resuming from last checkpoint: {last_checkpoint}")
@@ -164,6 +162,18 @@ except Exception as e:
     print("Could not detect Hub checkpoint. Starting fresh.")
     print(e)
 
+
+# ---------- W&B Initialize (or Resume) ----------
+# will resume from wandb id provided
+# else latest run in wandb if exisiting
+# else it wil create a new run
+# init_wandb() is a helper function for mapping depending on resuming or not
+# wandb.init(project=config["wandb"]["project"], id=run_id(str), resume="allow") 
+init_wandb(config, resume_checkpoint)
+
+
+
+# ---------- Train ----------
 # Auto resume safe:
 # trainer.train()
 trainer.train(resume_from_checkpoint=resume_checkpoint)
