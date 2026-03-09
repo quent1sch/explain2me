@@ -115,7 +115,7 @@ args = TrainingArguments(
     eval_steps=train_cfg["eval_steps"],
     save_strategy="steps",
     save_steps=train_cfg["save_steps"],
-    save_total_limit=2,
+    save_total_limit=3,
     load_best_model_at_end=True,
     report_to="wandb",
     push_to_hub=True,
@@ -148,15 +148,25 @@ trainer = SFTTrainer(
 resume_checkpoint = None
 
 try:
-    print("Checking Hugging Face Hub for existing checkpoints.")
+    print("\nChecking Hugging Face Hub for existing checkpoints.")
+
+    # Download repo locally (cached)
     repo_path = snapshot_download(repo_id)
+
+    # 1) try standard checkpoint detection (checkpoint-*)
     last_checkpoint = get_last_checkpoint(repo_path)
 
-    if last_checkpoint is not None:
-        print(f"Resuming from last checkpoint: {last_checkpoint}")
-        resume_checkpoint = last_checkpoint
+    # 2) fallback to last-checkpoint folder if no checkpoint-* found
+    if resume_checkpoint is None:
+        last_ckpt = os.path.join(repo_path, "last-checkpoint")
+        if os.path.isdir(last_ckpt):
+            print(f"Found 'last-checkpoint' on Hub. Resuming from: {last_ckpt}")
+            resume_checkpoint = last_ckpt
+        else:
+            print("No checkpoint found on Hub. Training from scratch.")
+
     else:
-        print("No checkpoint found. Train from start.")
+        print(f"Resuming from last checkpoint: {resume_checkpoint}")
 
 except Exception as e:
     print("Could not detect Hub checkpoint. Starting fresh.")
