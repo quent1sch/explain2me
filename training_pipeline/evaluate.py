@@ -1,3 +1,4 @@
+import os
 import torch
 import json
 import wandb
@@ -16,9 +17,9 @@ from tqdm import tqdm
 # ---------------------------
 
 model_id = "meta-llama/Meta-Llama-3.1-8B-Instruct"
-adapter_id = "your-username/llama-3.1-8b-explain2me-lora"
+adapter_id = "quent1sch/llama-3.1-8b-explain2me-lora"
 
-wandb_project = "explain2me-evaluation"
+wandb_project = "explain2me_qlora"
 num_generation_samples = 5
 
 
@@ -26,7 +27,12 @@ num_generation_samples = 5
 # INIT W&B
 # ---------------------------
 
-wandb.init(project=wandb_project)
+wandb.init(
+    project=wandb_project,
+    name="lora-test-evaluation+generation-comparison",
+    job_type="evaluation+generation",
+    group="explain2me-v1",
+    )
 
 
 # ---------------------------
@@ -42,6 +48,7 @@ dataset = load_dataset(
 
 dataset = dataset.remove_columns(["page_id"])
 
+# reproduce same split as training
 train_test = dataset.train_test_split(
     test_size=0.1,
     seed=42,
@@ -74,7 +81,19 @@ bnb_config = BitsAndBytesConfig(
     load_in_4bit=True,
     bnb_4bit_quant_type="nf4",
     bnb_4bit_compute_dtype=torch.bfloat16,
+    bnb_4bit_use_double_quant=True, # improves quantization accuracy by using a second quantization step
 )
+
+
+# ---------------------------
+# DEVICE SETUP
+# ---------------------------
+
+if torch.cuda.is_available():
+    device_map = "auto"  # let HF auto-place layers on GPU
+else:
+    print("GPU not found, using CPU with 4-bit model (requires enough RAM).")
+    device_map = {"": "cpu"}  # force entire model to CPU
 
 
 # ---------------------------
@@ -84,7 +103,7 @@ bnb_config = BitsAndBytesConfig(
 base_model = AutoModelForCausalLM.from_pretrained(
     model_id,
     quantization_config=bnb_config,
-    device_map="auto",
+    device_map=device_map,
 )
 
 
@@ -94,7 +113,7 @@ base_model = AutoModelForCausalLM.from_pretrained(
 
 lora_model = PeftModel.from_pretrained(
     base_model,
-    adapter_id
+    adapter_id,
 )
 
 
@@ -136,6 +155,9 @@ lora_loss = compute_loss(lora_model, test_ds)
 # GENERATION COMPARISON
 # ---------------------------
 
+# Generate a few representative samples for base vs LoRA (qualitative) comparison
+# Sampling (do_sample=True, temp=0.7) highlights variation and creativity
+
 generation_samples = []
 
 for i in range(num_generation_samples):
@@ -150,8 +172,10 @@ for i in range(num_generation_samples):
     inputs = tokenizer(prompt, return_tensors="pt").to(lora_model.device)
 
     with torch.no_grad():
-        base_output = base_model.generate(**inputs, max_new_tokens=200)
-        lora_output = lora_model.generate(**inputs, max_new_tokens=200)
+        # Use sampling to show natural variation in LoRA outputs;
+        # temperature=0.7 balances creativity vs coherence
+        base_output = base_model.generate(**inputs, max_new_tokens=200, do_sample=True, temperature=0.7)
+        lora_output = lora_model.generate(**inputs, max_new_tokens=200, do_sample=True, temperature=0.7)
 
     generation_samples.append({
         "prompt": prompt,
@@ -163,6 +187,8 @@ for i in range(num_generation_samples):
 # ---------------------------
 # SAVE RESULTS
 # ---------------------------
+
+os.makedirs("evaluation", exist_ok=True)
 
 results = {
     "base_loss": base_loss,

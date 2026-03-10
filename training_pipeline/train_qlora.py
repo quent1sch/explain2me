@@ -110,7 +110,6 @@ args = TrainingArguments(
     weight_decay=train_cfg["weight_decay"],
     bf16=True,
     logging_steps=5,
-    # evaluation_strategy="steps",
     eval_strategy="steps",
     eval_steps=train_cfg["eval_steps"],
     save_strategy="steps",
@@ -122,6 +121,7 @@ args = TrainingArguments(
     hub_model_id=repo_id,
     hub_strategy="checkpoint", # required for resume training: 
                                # pushes checkpoint folders (not just model files like "every_save")
+    remove_unused_columns=False, # required so evaluate() doesn't drop "messages" used by formatting_func
     disable_tqdm=False,
 )
 
