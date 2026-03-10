@@ -158,14 +158,21 @@ wandb.init(
 # RECREATE TRAINER
 # ---------------------------
 
+def preprocess_eval(example):
+    # Apply the chat template and tokenize
+    return tokenizer.apply_chat_template(example["messages"], tokenize=True)
+
+# Apply chat template and tokenize to the whole evaluation dataset
+test_ds = test_ds.map(formatting_func, remove_columns=test_ds.column_names)
+
 trainer = SFTTrainer(
     model=lora_model,
     args=training_args,
     train_dataset=train_val['train'], # required but we wont use it though
     eval_dataset=test_ds,
     peft_config=None, # already loaded
-    processing_class=tokenizer,
-    formatting_func=formatting_func,
+    processing_class=None, #tokenizer,
+    formatting_func=None, #formatting_func,
 )
 
 
