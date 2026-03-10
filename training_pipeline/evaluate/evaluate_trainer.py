@@ -155,9 +155,9 @@ wandb.init(
 trainer = SFTTrainer(
     model=lora_model,
     args=training_args,
-    train_dataset=None,  # no training
+    train_dataset=train_val['train'], # required but we wont use it though
     eval_dataset=test_ds,
-    peft_config=None,    # already loaded
+    peft_config=None, # already loaded
     processing_class=tokenizer,
     formatting_func=formatting_func,
 )
