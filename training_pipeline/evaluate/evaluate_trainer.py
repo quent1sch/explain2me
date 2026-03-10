@@ -105,7 +105,13 @@ test_ds = train_test["test"]
 def formatting_func(example):
     return tokenizer.apply_chat_template(
         example["messages"],
-        tokenize=False
+        tokenize=True,
+        # During training we set tokenize=False because SFTTrainer 
+        # tokenizes lazily for memory efficiency.
+        # Now in evaluation we must set tokenize=True so each example 
+        # has 'input_ids' and 'attention_mask' 
+        # before batching, otherwise SFTTrainer’s collator will throw a 
+        # KeyError.
     )
 
 # ---------------------------
