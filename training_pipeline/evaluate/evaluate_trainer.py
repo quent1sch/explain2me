@@ -181,7 +181,13 @@ trainer = SFTTrainer(
 # ---------------------------
 
 print("Running evaluation on test split...")
-test_metrics = trainer.evaluate(test_ds)
+
+# to use less GPU memory:
+# empty cache before evaluation
+torch.cuda.empty_cache()
+# avoid storing gradient (unnecessary memory usage)
+with torch.no_grad(): 
+    test_metrics = trainer.evaluate(test_ds)
 
 
 # ---------------------------
