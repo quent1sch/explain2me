@@ -1,4 +1,27 @@
-# evaluate_trainer.py
+"""
+evaluate_trainer.py
+
+Purpose:
+---------
+Evaluate a fine-tuned causal language model (e.g., LLaMA) with a LoRA adapter on a held-out test split.
+Reproduces the same dataset splits used during QLoRA training and logs metrics to W&B.
+Measures performance (loss, perplexity, etc.) on unseen data without gradient updates, providing a reliable benchmark.
+
+Key Features:
+-------------
+- **Config-driven**: YAML defines model, dataset, LoRA adapter, training, and W&B settings.
+- **4-bit QLoRA support**: Loads base model with 4-bit quantization for memory efficiency.
+- **LoRA adapter**: Loads PEFT fine-tuned adapter on top of the quantized model.
+- **Dataset processing**: Loads HF dataset, applies chat template, and tokenizes so `input_ids` exist.
+- **SFTTrainer usage**: `train_dataset` required but unused; `eval_dataset` pre-tokenized.
+- **Memory optimization**: Uses `torch.no_grad()` and clears CUDA cache before evaluation.
+- **Logging & Hub integration**: Evaluation metrics logged to W&B; optional push to HF Hub.
+
+Notes:
+------
+- Training uses `tokenize=False` for lazy tokenization; evaluation uses `tokenize=True` to ensure `input_ids`.
+- Full-sequence evaluation may require reducing batch size on limited-memory GPUs to avoid OOM errors.
+"""
 
 import os
 import torch
