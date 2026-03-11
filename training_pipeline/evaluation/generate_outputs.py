@@ -9,7 +9,7 @@ to be later evaluated by an LLM-as-a-judge.
 
 Outputs for each example include:
 - Prompt / user request
-- Reference explanation (simplified wiki)
+- Reference explanation (test data)
 - Base model output
 - LoRA model output
 
@@ -44,8 +44,8 @@ model_id = config["model_id"]
 adapter_id = config["evaluation_trainer"]["adapter_id"]
 
 # SUP.
-NUM_SAMPLES = 10 # keep small 
-MAX_NEW_TOKENS = 200
+NUM_SAMPLES = 10 # keep small
+MAX_NEW_TOKENS = 2048
 TEMPERATURE = 0.7
 OUTPUT_FILE = "evaluation/generate_outputs.json"
 
@@ -104,6 +104,25 @@ lora_model = PeftModel.from_pretrained(base_model, adapter_id)
 lora_model.eval()
 
 # ---------------------------
+# STRUCTURE FUNCTION FOR INFERENCE
+# ---------------------------
+
+def build_inference_prompt(messages):
+    non_assistant_msgs = [m for m in messages if m["role"] != "assistant"]
+    
+    prompt = tokenizer.apply_chat_template(
+        non_assistant_msgs,
+        tokenize=False,
+        add_generation_prompt=True
+    )
+    
+    return prompt
+
+def get_content(messages, role):
+    return next(m["content"] for m in messages if m["role"] == role)
+
+
+# ---------------------------
 # GENERATE OUTPUTS
 # ---------------------------
 
@@ -114,7 +133,11 @@ for example in tqdm(test_ds.select(range(NUM_SAMPLES))):
 
     # Build prompt from messages
     messages = example["messages"]
-    prompt = tokenizer.apply_chat_template(messages, tokenize=False)
+
+    prompt = build_inference_prompt(messages)
+    question = get_content(messages, role="user")
+    reference = get_content(messages, role="assistant")
+
 
     inputs = tokenizer(prompt, return_tensors="pt").to(base_model.device)
 
@@ -138,8 +161,8 @@ for example in tqdm(test_ds.select(range(NUM_SAMPLES))):
         lora_text = tokenizer.decode(lora_tokens[0], skip_special_tokens=True)
 
     outputs.append({
-        "prompt": prompt,
-        "reference": example.get("reference", ""),  # if you have reference simplified wiki
+        "question": question,
+        "reference": reference,
         "base_output": base_text,
         "lora_output": lora_text,
     })

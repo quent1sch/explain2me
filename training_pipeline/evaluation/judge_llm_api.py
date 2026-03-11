@@ -29,12 +29,20 @@ pipeline.
 """
 
 import os
+import yaml
 import json
 from tqdm import tqdm
 from huggingface_hub import InferenceClient
 
+# ---------------------------
+# GET CONFIG
+# ---------------------------
 
-MODEL_ID = "mistralai/Mistral-7B-Instruct-v0.2"
+config_path = os.path.join(os.path.dirname(__file__), "..", "config.yaml")
+with open(config_path, "r") as f:
+    config = yaml.safe_load(f)
+
+model_id = config["llm_as_a_judge"]["model_id"]
 
 INPUT_FILE = "evaluation/outputs.json"
 OUTPUT_SCORE = "evaluation_results/judge_scores.json"
@@ -56,7 +64,7 @@ with open(INPUT_FILE, "r") as f:
 # ---------------------------
 
 client = InferenceClient(
-    model=MODEL_ID,
+    model=model_id,
     token=HF_TOKEN,
 )
 
@@ -73,7 +81,7 @@ You are evaluating explanations produced by an AI tutor.
 User request:
 {prompt}
 
-Reference explanation:
+Benchmark explanation:
 {reference}
 
 Generated explanation:
@@ -103,7 +111,7 @@ def judge_output(prompt, reference, output):
 
     response = client.text_generation(
         judge_prompt,
-        max_new_tokens=150,
+        max_new_tokens=2048,
         temperature=0.2
     )
 
@@ -129,13 +137,13 @@ results = []
 for sample in tqdm(samples):
 
     base_scores = judge_output(
-        sample["prompt"],
+        sample["question"],
         sample["reference"],
         sample["base_output"]
     )
 
     lora_scores = judge_output(
-        sample["prompt"],
+        sample["question"],
         sample["reference"],
         sample["lora_output"]
     )

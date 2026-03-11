@@ -40,3 +40,6 @@ evaluation_trainer:
   # hf_dataset_repo: quent1sch/explain2me
   # test_split_ratio: 0.1
   # seed: 42
+
+llm_as_a_judge:
+  model_id: mistralai/Mistral-7B-Instruct-v0.2
