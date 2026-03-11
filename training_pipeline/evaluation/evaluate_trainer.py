@@ -1,26 +1,25 @@
 """
 evaluate_trainer.py
 
-Purpose:
----------
-Evaluate a fine-tuned causal language model (e.g., LLaMA) with a LoRA adapter on a held-out test split.
-Reproduces the same dataset splits used during QLoRA training and logs metrics to W&B.
-Measures performance (loss, perplexity, etc.) on unseen data without gradient updates, providing a reliable benchmark.
+Purpose
+-------
+Evaluate a LoRA fine-tuned causal language model (e.g., LLaMA) on a held-out
+test split and log loss and perplexity to Weights & Biases.
 
-Key Features:
--------------
-- **Config-driven**: YAML defines model, dataset, LoRA adapter, training, and W&B settings.
-- **4-bit QLoRA support**: Loads base model with 4-bit quantization for memory efficiency.
-- **LoRA adapter**: Loads PEFT fine-tuned adapter on top of the quantized model.
-- **Dataset processing**: Loads HF dataset, applies chat template, and tokenizes so `input_ids` exist.
-- **SFTTrainer usage**: `train_dataset` required but unused; `eval_dataset` pre-tokenized.
-- **Memory optimization**: Uses `torch.no_grad()` and clears CUDA cache before evaluation.
-- **Logging & Hub integration**: Evaluation metrics logged to W&B; optional push to HF Hub.
+Key Features
+------------
+- Config-driven setup (model, dataset, LoRA adapter, training settings, W&B).
+- Loads base model in 4-bit (QLoRA) for memory-efficient inference.
+- Applies LoRA adapter using PEFT.
+- Recreates the same dataset splits used during training.
+- Applies the model chat template and tokenizes evaluation data.
+- Truncates long sequences (e.g., 2048 tokens) to avoid GPU OOM.
+- Uses `prediction_loss_only=True` for memory-efficient evaluation.
 
-Notes:
-------
-- Training uses `tokenize=False` for lazy tokenization; evaluation uses `tokenize=True` to ensure `input_ids`.
-- Full-sequence evaluation may require reducing batch size on limited-memory GPUs to avoid OOM errors.
+Notes
+-----
+Training uses lazy tokenization (`tokenize=False`), while evaluation requires
+pre-tokenized inputs (`input_ids`, `attention_mask`) for batching.
 """
 
 import os
@@ -108,6 +107,8 @@ lora_model = PeftModel.from_pretrained(
     adapter_id,
 )
 
+lora_model.eval()  # switch model to inference mode
+
 # ---------------------------
 # LOAD DATASET
 # ---------------------------
@@ -181,12 +182,67 @@ wandb.init(
 # RECREATE TRAINER
 # ---------------------------
 
-def preprocess_eval(example):
-    # Apply the chat template and tokenize
-    return tokenizer.apply_chat_template(example["messages"], tokenize=True)
+# preprocess/formating_func:
+    # During training we set tokenize=False because SFTTrainer 
+    # tokenizes lazily for memory efficiency.
+    # Now in evaluation we must set tokenize=True so each example 
+    # has 'input_ids' and 'attention_mask' 
+    # before batching, otherwise SFTTrainer’s collator will throw a 
+    # KeyError.
+    
+    # Plus, with colab free tier GPU, we get CUDA out of memory Error. 
+    # This comes directly from the extensive length of messages in the dataset.
+    # !!! Attention Mechanism Scales Quadratically with sequence length !!!
+    # Therefore, for sake of memory, we truncate the sequence. But as dataset
+    # has a specific role/content structure, we must preserve it.
 
-# Apply chat template and tokenize to the whole evaluation dataset
-test_ds = test_ds.map(formatting_func, remove_columns=test_ds.column_names)
+
+def preprocess_eval(example, max_tokens=1536):
+    """
+    Prepares a chat example for evaluation, applying role-preserving truncation
+    to avoid OOM on long assistant messages.
+    
+    Args:
+        example (dict): {"messages": [{"role": ..., "content": ...}, ...]}
+        max_tokens (int): maximum total tokens per example
+
+    Returns:
+        dict: {"input_ids": ..., "attention_mask": ...}
+    """
+    truncated_messages = []
+    total_tokens = 0
+
+    for msg in example["messages"]:
+        role = msg["role"]
+        content = msg["content"]
+
+        tokens = tokenizer.encode(content)
+
+        if total_tokens + len(tokens) > max_tokens:
+            if role == "assistant":
+                remaining = max_tokens - total_tokens
+                if remaining > 0:
+                    tokens = tokens[:remaining]
+                    truncated_messages.append({"role": role, "content": tokenizer.decode(tokens)})
+                break
+            else:
+                break
+        else:
+            truncated_messages.append({"role": role, "content": content})
+            total_tokens += len(tokens)
+
+    # Apply the chat template (tokenize=True so we get input_ids/attention_mask)
+    return tokenizer.apply_chat_template(
+        truncated_messages,
+        tokenize=True
+    )
+
+# Apply preprocessing function (truncate, chat format and tokenizze) to the whole eval dataset
+test_ds = test_ds.map(
+    preprocess_eval, 
+    fn_kwargs={"max_tokens": 1536},
+    remove_columns=test_ds.column_names
+    )
 
 trainer = SFTTrainer(
     model=lora_model,
@@ -194,8 +250,8 @@ trainer = SFTTrainer(
     train_dataset=train_val['train'], # required but we wont use it though
     eval_dataset=test_ds,
     peft_config=None, # already loaded
-    processing_class=None, #tokenizer,
-    formatting_func=None, #formatting_func,
+    processing_class=None, # tokenizer and formatting done already with preprocess_eval
+    formatting_func=None, 
 )
 
 
