@@ -44,7 +44,7 @@ with open(config_path, "r") as f:
 
 model_id = config["llm_as_a_judge"]["model_id"]
 
-INPUT_FILE = "evaluation/outputs.json"
+INPUT_FILE = "evaluation/generate_outputs.json" 
 OUTPUT_SCORE = "evaluation_results/judge_scores.json"
 OUTPUT_SUMMARY = "evaluation_results/judge_summary.json"
 
