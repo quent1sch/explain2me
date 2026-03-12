@@ -75,7 +75,8 @@ test_split_ratio = config["dataset"]["test_split_ratio"]
 seed = config["dataset"]["seed"]
 
 NUM_EXAMPLES = 100  # limit for Colab free-tier
-EVAL_OUTPUT_DIR = "evaluation"
+EVAL_OUTPUT_DIR = "training_pipeline/evaluation/evaluation_results"
+GENERATED_OUTPUT_PATH = "training_pipeline/evaluation/evaluation_results/generate_outputs.json"
 
 os.makedirs(EVAL_OUTPUT_DIR, exist_ok=True)
 
@@ -110,33 +111,12 @@ test_ds = train_test["test"][:NUM_EXAMPLES]
 
 
 # ---------------------------
-# GENERATE OUTPUTS
+# GENERATE OUTPUTS 
 # ---------------------------
 
-def generate_text(model, prompt, max_tokens=2048):
-    inputs = tokenizer(prompt, return_tensors="pt").to(model.device)
-    with torch.no_grad():
-        output_ids = model.generate(
-            **inputs, max_new_tokens=max_tokens, do_sample=False
-        )
-    return tokenizer.decode(output_ids[0], skip_special_tokens=True)
-
-print("Generating outputs...")
-results = []
-
-for example in tqdm(test_ds):
-    prompt = tokenizer.apply_chat_template(example["messages"], tokenize=False)
-
-    base_out = generate_text(base_model, prompt)
-    lora_out = generate_text(lora_model, prompt)
-    reference = tokenizer.apply_chat_template(example["messages"], tokenize=False)
-
-    results.append({
-        "prompt": prompt,
-        "reference": reference,
-        "base_output": base_out,
-        "lora_output": lora_out
-    })
+# get generated outputs from base & lora models - To be used for evaluation
+with open(GENERATED_OUTPUT_PATH, "r") as f:
+    eval_inputs = json.load(f)
 
 # ---------------------------
 # COMPUTE ROUGE-L
@@ -147,16 +127,16 @@ def compute_rouge(preds, refs):
     scores = [scorer.score(ref, pred)["rougeL"].fmeasure for ref, pred in zip(preds, refs)]
     return sum(scores) / len(scores)
 
-base_rouge = compute_rouge([r["base_output"] for r in results], [r["reference"] for r in results])
-lora_rouge = compute_rouge([r["lora_output"] for r in results], [r["reference"] for r in results])
+base_rouge = compute_rouge([r["base_output"] for r in eval_inputs], [r["reference"] for r in eval_inputs])
+lora_rouge = compute_rouge([r["lora_output"] for r in eval_inputs], [r["reference"] for r in eval_inputs])
 
 # ---------------------------
 # COMPUTE BERTScore
 # ---------------------------
 
 P, R, F1 = bert_score.score(
-    [r["lora_output"] for r in results],
-    [r["reference"] for r in results],
+    [r["lora_output"] for r in eval_inputs],
+    [r["reference"] for r in eval_inputs],
     lang="en"
 )
 lora_bertscore_f1 = F1.mean().item()
@@ -168,7 +148,7 @@ lora_bertscore_f1 = F1.mean().item()
 def compute_readability(texts):
     return sum([textstat.flesch_kincaid_grade(t) for t in texts]) / len(texts)
 
-lora_readability = compute_readability([r["lora_output"] for r in results])
+lora_readability = compute_readability([r["lora_output"] for r in eval_inputs])
 
 # ---------------------------
 # SAVE METRICS AND EXAMPLES
@@ -182,11 +162,9 @@ metrics = {
     "rougeL_improvement": lora_rouge - base_rouge
 }
 
-with open(os.path.join(EVAL_OUTPUT_DIR, "metrics.json"), "w") as f:
+with open(os.path.join(EVAL_OUTPUT_DIR, "eval_lora_metrics.json"), "w") as f:
     json.dump(metrics, f, indent=2)
 
-with open(os.path.join(EVAL_OUTPUT_DIR, "sample_outputs.json"), "w") as f:
-    json.dump(results, f, indent=2)
 
-print("Evaluation complete. Metrics saved to 'evaluation/' folder.")
+print(f"Evaluation complete. Metrics saved to {EVAL_OUTPUT_DIR} folder.")
 print(metrics)
