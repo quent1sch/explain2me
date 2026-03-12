@@ -44,9 +44,9 @@ with open(config_path, "r") as f:
 
 model_id = config["llm_as_a_judge"]["model_id"]
 
-INPUT_FILE = "evaluation_results/generate_outputs.json" 
-OUTPUT_SCORE = "evaluation_results/judge_scores.json"
-OUTPUT_SUMMARY = "evaluation_results/judge_summary.json"
+INPUT_FILE = "training_pipeline/evaluation/evaluation_results/generate_outputs.json" 
+OUTPUT_SCORE = "training_pipeline/evaluation/evaluation_results/judge_scores.json"
+OUTPUT_SUMMARY = "training_pipeline/evaluation/evaluation_results/judge_summary.json"
 
 HF_TOKEN = os.getenv("HF_TOKEN")
 
