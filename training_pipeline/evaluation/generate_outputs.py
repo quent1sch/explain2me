@@ -47,7 +47,7 @@ adapter_id = config["evaluation_trainer"]["adapter_id"]
 NUM_SAMPLES = 10 # keep small
 MAX_NEW_TOKENS = 2048
 TEMPERATURE = 0.7
-OUTPUT_FILE = "evaluation/generate_outputs.json"
+OUTPUT_FILE = "training_pipeline/evaluation/evaluation_results/generate_outputs.json"
 
 # ---------------------------
 # LOAD DATASET (test split)
@@ -143,22 +143,27 @@ for example in tqdm(test_ds.select(range(NUM_SAMPLES))):
 
     with torch.no_grad():
         # Base model
-        base_tokens = base_model.generate(
+        base_outputs = base_model.generate(
             **inputs,
             max_new_tokens=MAX_NEW_TOKENS,
             do_sample=True,
             temperature=TEMPERATURE
         )
-        base_text = tokenizer.decode(base_tokens[0], skip_special_tokens=True)
+        # keep only generated part (not input prompt)
+        generated_tokens = base_outputs[0][inputs["input_ids"].shape[-1]:]
+
+        # decode generated text (without special tokens)
+        base_text = tokenizer.decode(generated_tokens, skip_special_tokens=True)
 
         # LoRA model
-        lora_tokens = lora_model.generate(
+        lora_outputs = lora_model.generate(
             **inputs,
             max_new_tokens=MAX_NEW_TOKENS,
             do_sample=True,
             temperature=TEMPERATURE
         )
-        lora_text = tokenizer.decode(lora_tokens[0], skip_special_tokens=True)
+        generated_tokens = lora_outputs[0][inputs["input_ids"].shape[-1]:]
+        lora_text = tokenizer.decode(generated_tokens, skip_special_tokens=True)
 
     outputs.append({
         "question": question,

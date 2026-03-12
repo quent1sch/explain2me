@@ -113,7 +113,7 @@ test_ds = train_test["test"][:NUM_EXAMPLES]
 # GENERATE OUTPUTS
 # ---------------------------
 
-def generate_text(model, prompt, max_tokens=200):
+def generate_text(model, prompt, max_tokens=2048):
     inputs = tokenizer(prompt, return_tensors="pt").to(model.device)
     with torch.no_grad():
         output_ids = model.generate(
