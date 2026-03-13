@@ -1,7 +1,0 @@
-{
-  "base_rougeL": 0.17622744455003764,
-  "lora_rougeL": 0.17890542426926123,
-  "lora_bertscore_f1": 0.8496443033218384,
-  "lora_flesch_kincaid_grade": 10.630017594437756,
-  "rougeL_improvement": 0.0026779797192235943
-}
