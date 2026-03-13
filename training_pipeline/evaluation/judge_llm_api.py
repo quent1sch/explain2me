@@ -109,11 +109,13 @@ def judge_output(prompt, reference, output):
 
     judge_prompt = build_prompt(prompt, reference, output)
 
-    response = client.text_generation(
-        judge_prompt,
-        max_new_tokens=2048,
+    result = client.chat_completion(
+        messages=[{"role": "user", "content": judge_prompt}],
+        max_tokens=2048,
         temperature=0.2
     )
+
+    response = result.choices[0].message.content
 
     try:
         start = response.find("{")

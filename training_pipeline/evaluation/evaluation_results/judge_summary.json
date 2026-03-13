@@ -1,0 +1,14 @@
+{
+  "base": {
+    "faithfulness": 3.3,
+    "simplicity": 3.7,
+    "clarity": 3.6,
+    "overall": 3.2
+  },
+  "lora": {
+    "faithfulness": 3.0,
+    "simplicity": 3.3,
+    "clarity": 3.3,
+    "overall": 2.9
+  }
+}

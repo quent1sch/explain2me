@@ -1,0 +1,142 @@
+[
+  {
+    "base": {
+      "faithfulness": 3,
+      "simplicity": 4,
+      "clarity": 4,
+      "overall": 3
+    },
+    "lora": {
+      "faithfulness": 3,
+      "simplicity": 4,
+      "clarity": 4,
+      "overall": 3
+    }
+  },
+  {
+    "base": {
+      "faithfulness": 4,
+      "simplicity": 4,
+      "clarity": 4,
+      "overall": 4
+    },
+    "lora": {
+      "faithfulness": 3,
+      "simplicity": 4,
+      "clarity": 3,
+      "overall": 3
+    }
+  },
+  {
+    "base": {
+      "faithfulness": 4,
+      "simplicity": 3,
+      "clarity": 4,
+      "overall": 3
+    },
+    "lora": {
+      "faithfulness": 2,
+      "simplicity": 1,
+      "clarity": 2,
+      "overall": 1
+    }
+  },
+  {
+    "base": {
+      "faithfulness": 4,
+      "simplicity": 5,
+      "clarity": 4,
+      "overall": 4
+    },
+    "lora": {
+      "faithfulness": 3,
+      "simplicity": 4,
+      "clarity": 4,
+      "overall": 3
+    }
+  },
+  {
+    "base": {
+      "faithfulness": 3,
+      "simplicity": 4,
+      "clarity": 3,
+      "overall": 3
+    },
+    "lora": {
+      "faithfulness": 4,
+      "simplicity": 5,
+      "clarity": 4,
+      "overall": 4
+    }
+  },
+  {
+    "base": {
+      "faithfulness": 2,
+      "simplicity": 3,
+      "clarity": 2,
+      "overall": 2
+    },
+    "lora": {
+      "faithfulness": 2,
+      "simplicity": 3,
+      "clarity": 2,
+      "overall": 2
+    }
+  },
+  {
+    "base": {
+      "faithfulness": 4,
+      "simplicity": 3,
+      "clarity": 4,
+      "overall": 3
+    },
+    "lora": {
+      "faithfulness": 3,
+      "simplicity": 2,
+      "clarity": 3,
+      "overall": 3
+    }
+  },
+  {
+    "base": {
+      "faithfulness": 4,
+      "simplicity": 4,
+      "clarity": 4,
+      "overall": 4
+    },
+    "lora": {
+      "faithfulness": 4,
+      "simplicity": 4,
+      "clarity": 4,
+      "overall": 4
+    }
+  },
+  {
+    "base": {
+      "faithfulness": 3,
+      "simplicity": 4,
+      "clarity": 4,
+      "overall": 3
+    },
+    "lora": {
+      "faithfulness": 3,
+      "simplicity": 4,
+      "clarity": 4,
+      "overall": 3
+    }
+  },
+  {
+    "base": {
+      "faithfulness": 2,
+      "simplicity": 3,
+      "clarity": 3,
+      "overall": 3
+    },
+    "lora": {
+      "faithfulness": 3,
+      "simplicity": 2,
+      "clarity": 3,
+      "overall": 3
+    }
+  }
+]

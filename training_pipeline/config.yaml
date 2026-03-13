@@ -42,4 +42,4 @@ evaluation_trainer:
   # seed: 42
 
 llm_as_a_judge:
-  model_id: mistralai/Mistral-7B-Instruct-v0.2
+  model_id: Qwen/Qwen2.5-7B-Instruct
