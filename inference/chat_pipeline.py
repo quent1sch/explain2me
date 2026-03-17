@@ -12,10 +12,6 @@ from huggingface_hub import InferenceClient
 
 
 
-
-
-
-
 # -------------------- EXPLAIN2ME CLASS --------------------
 class Explain2MePipeline:
     def __init__(
@@ -38,10 +34,18 @@ class Explain2MePipeline:
         self.adapter_id = adapter_id
         self.max_new_tokens = max_new_tokens
         self.temperature = temperature
-        self.db_path = db_path
         self.summary_threshold = summary_threshold
         self.max_recent_messages = max_recent_messages
-        self.summary_model = summary_model or "Qwen/Qwen2.5-7B-Instruct"
+        self.summary_model = summary_model or "tiiuae/Falcon-H1-3B-Base"
+
+        # Resolve db_path relative to the class file
+        db_path = Path(db_path)
+        if not db_path.is_absolute():
+            db_path = Path(__file__).parent / db_path
+        self.db_path = str(db_path)
+
+        # Ensure parent folder exists
+        db_path.parent.mkdir(parents=True, exist_ok=True)
 
         # tokenizer + model
         self.tokenizer = AutoTokenizer.from_pretrained(model_id)

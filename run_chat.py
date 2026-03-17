@@ -20,7 +20,7 @@ except NameError:
 sys.path.append(str(repo_root))
 
 from inference.chat_pipeline import Explain2MePipeline
-
+ 
 
 # -------------------- LOAD HF TOKEN --------------------
 # 1. Try Colab secrets / environment variable
