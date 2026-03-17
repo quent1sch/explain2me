@@ -1,5 +1,5 @@
 chat_history:
-  db_path: inference/chat_history.db
+  db_path: chat_history.db
 
 model:
   load_in_4bit: true
@@ -14,7 +14,7 @@ memory:
   max_recent_messages: 6
 
 summarization:
-  model: tiiuae/Falcon-H1-3B-Base
+  model: Qwen/Qwen2.5-7B-Instruct
   max_new_tokens: 150
 
 system_prompt: |
