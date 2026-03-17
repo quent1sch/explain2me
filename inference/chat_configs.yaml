@@ -5,7 +5,7 @@ model:
   load_in_4bit: true
 
 generation:
-  max_new_tokens: 1024
+  max_new_tokens: 256
   temperature: 0.7
   top_p: 0.9
 
@@ -19,4 +19,4 @@ summarization:
 
 system_prompt: |
   You explain concepts clearly and adapt explanations
-  to the user's level.
+  to the user's level (age, education, job, etc.).

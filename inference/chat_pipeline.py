@@ -1,5 +1,5 @@
 """
-inference_pipeline.py
+chat_pipeline.py
 """
 
 from pathlib import Path
