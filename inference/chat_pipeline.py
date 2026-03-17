@@ -36,7 +36,7 @@ class Explain2MePipeline:
         self.temperature = temperature
         self.summary_threshold = summary_threshold
         self.max_recent_messages = max_recent_messages
-        self.summary_model = summary_model or "tiiuae/Falcon-H1-3B-Base"
+        self.summary_model = summary_model or "Qwen/Qwen2.5-7B-Instruct"
 
         # Resolve db_path relative to the class file
         db_path = Path(db_path)
@@ -167,10 +167,13 @@ class Explain2MePipeline:
     def _generate_chat_title(self, first_message):
         """Generate a chat title"""
         if self.summary_client:
-            prompt = f"Summarize this into a short 3-7 word title:\n{first_message}"
-            return self.summary_client.text_generation(
-                prompt, max_new_tokens=30, stop=["\n"]
-                ).strip()
+            messages = [{"role": "user", "content": f"Summarize this into a short 3-7 word title:\n{first_message}"}]
+            response = self.summary_client.chat.completions.create(
+                messages=messages,
+                max_tokens=150
+                )
+            return response.choices[0].message["content"]
+        
         return first_message[:25] + ("..." if len(first_message) > 25 else "")
 
     def load_chat(self, chat_id):
@@ -228,10 +231,12 @@ class Explain2MePipeline:
             Conversation:
             {combined_text}
             """
-
-        summary = self.summary_client.text_generation(
-            prompt, max_new_tokens=150
-            ).strip()
+        messages = [{"role": "user", "content": prompt}]
+        completion = self.summary_client.chat.completions.create(
+            messages=messages,
+            max_tokens=150
+            )
+        summary = completion.choices[0].message["content"]
 
         # rebuild memory
         self.chat_history = (
