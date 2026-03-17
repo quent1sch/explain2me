@@ -7,6 +7,7 @@ import sys
 from pathlib import Path
 import yaml
 
+
 # -------------------- PATH SETUP --------------------
 try:
     # __file__ exists if run as a script
@@ -20,7 +21,7 @@ sys.path.append(str(repo_root))
 from inference.chat_pipeline import Explain2MePipeline
 
 # -------------------- LOAD CONFIGS --------------------
-with open(repo_root / "inference" / "inference_configs.yaml") as f:
+with open(repo_root / "inference" / "chat_configs.yaml") as f:
     inf_config = yaml.safe_load(f)
 
 with open(repo_root / "training_pipeline" / "config.yaml") as f:
