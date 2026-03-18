@@ -20,7 +20,6 @@ class Explain2MePipeline:
     adapter_id=None,
     max_new_tokens=1024,
     temperature=0.7,
-    top_p=0.9,
     load_in_4bit=True,
     summary_threshold=2000, # max tokens before summarization
     max_recent_messages=6, # when summarize chat history, keep last 6 messages intact
@@ -150,14 +149,11 @@ class Explain2MePipeline:
         self.conn.commit()
 
     # -------------------- CHAT MANAGEMENT --------------------
-    def new_chat(self, first_user_message=None):
+    
+    def _new_chat(self, first_user_message=None):
         """Start a fresh conversation"""
         self.chat_history = [{"role": "system", "content": self.system_message}]
-
-        title = (
-            self._generate_chat_title(first_user_message)
-            if first_user_message else None
-            )
+        title = self._generate_chat_title(first_user_message) if first_user_message else None
 
         c = self.conn.cursor()
         c.execute("INSERT INTO chats (title) VALUES (?)", (title,))
@@ -300,17 +296,24 @@ class Explain2MePipeline:
         generated_tokens = outputs[0][inputs["input_ids"].shape[-1]:]
         return self.tokenizer.decode(generated_tokens, skip_special_tokens=True)
 
-    def generate(self, user_prompt):
-        if self.current_chat_id is None:
-            self.new_chat(first_user_message=user_prompt)
-        
-        # Add user message
+    
+    def generate(self, user_prompt, is_new_chat=False):
+        """
+        Generate a reply to `user_prompt`.
+        If is_new_chat=True, start a new chat and generate a title.
+        """
+        if self.current_chat_id is None or is_new_chat:
+            # Start a new chat and generate a title
+            self._new_chat(first_user_message=user_prompt)
+
+        # Append user message
         self.chat_history.append({"role": "user", "content": user_prompt})
         self._store_message("user", user_prompt)
 
         # Generate assistant reply
         reply = self._generate_from_messages()
 
+        # Append assistant reply to chat history and store in DB
         self.chat_history.append({"role": "assistant", "content": reply})
         self._store_message("assistant", reply)
 

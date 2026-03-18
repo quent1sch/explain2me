@@ -10,13 +10,10 @@ import yaml
 
 
 # -------------------- PATH SETUP --------------------
-try:
-    # __file__ exists if run as a script
-    repo_root = Path(__file__).resolve().parents[0]
-except NameError:
-    # In Colab or notebook
-    repo_root = Path.cwd()
+# __file__ only exists if run as a script (no notebooks!)
+repo_root = Path(__file__).resolve().parents[0]
 
+# required for importing modules from the repo
 sys.path.append(str(repo_root))
 
 from inference.chat_pipeline import Explain2MePipeline
