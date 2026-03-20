@@ -1,5 +1,15 @@
 """
 chat_pipeline.py
+
+Core chat pipeline for Explain2Me conversational AI.
+
+This module handles:
+- Model loading (base + optional PEFT adapter)
+- Chat generation using a structured prompt
+- Conversation memory with summarization for long chats
+- Persistent storage of chats and messages (SQLite)
+- Optional Hugging Face API integration for summaries and titles
+- Basic production safeguards (logging, retries, error handling, validation)
 """
 
 from pathlib import Path
@@ -9,6 +19,16 @@ from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
 from peft import PeftModel
 import sqlite3
 from huggingface_hub import InferenceClient
+import logging
+import time
+
+# -------------------- LOGGING --------------------
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s"
+)
+
+logger = logging.getLogger("Explain2Me")
 
 
 
@@ -61,7 +81,11 @@ class Explain2MePipeline:
 
         # DB 
         # connect to DB and initialize it if does not exist
-        self.conn = sqlite3.connect(self.db_path, check_same_thread=False)
+        self.conn = sqlite3.connect(
+            self.db_path, 
+            check_same_thread=False,
+            timeout=10
+            )
         self._init_db()
 
 
@@ -97,30 +121,39 @@ class Explain2MePipeline:
 
     # -------------------- MODEL LOADING --------------------
     def _load_model(self, load_in_4bit):
-        bnb_config = None
-        if load_in_4bit:
-            bnb_config = BitsAndBytesConfig(
-                load_in_4bit=True,
-                bnb_4bit_quant_type="nf4",
-                bnb_4bit_compute_dtype=torch.bfloat16,
-                bnb_4bit_use_double_quant=True,
+        try:
+            logger.info(f"Loading model: {self.model_id}")
+
+            bnb_config = None
+            if load_in_4bit:
+                bnb_config = BitsAndBytesConfig(
+                    load_in_4bit=True,
+                    bnb_4bit_quant_type="nf4",
+                    bnb_4bit_compute_dtype=torch.bfloat16,
+                    bnb_4bit_use_double_quant=True,
                 )
 
-        device_map = "auto" if torch.cuda.is_available() else {"": "cpu"}
+            device_map = "auto" if torch.cuda.is_available() else {"": "cpu"}
 
-        base_model = AutoModelForCausalLM.from_pretrained(
-            self.model_id,
-            quantization_config=bnb_config,
-            device_map=device_map,
+            base_model = AutoModelForCausalLM.from_pretrained(
+                self.model_id,
+                quantization_config=bnb_config,
+                device_map=device_map,
             )
 
-        if self.adapter_id:
-            model = PeftModel.from_pretrained(base_model, self.adapter_id)
-        else:
-            model = base_model
+            if self.adapter_id:
+                logger.info(f"Loading adapter: {self.adapter_id}")
+                model = PeftModel.from_pretrained(base_model, self.adapter_id)
+            else:
+                model = base_model
 
-        model.eval()
-        return model
+            model.eval()
+            logger.info("Model loaded successfully")
+            return model
+
+        except Exception:
+            logger.exception("Model loading failed")
+            raise RuntimeError("Failed to load model")
 
     # -------------------- DATABASE --------------------
     def _init_db(self):
@@ -148,6 +181,25 @@ class Explain2MePipeline:
 
         self.conn.commit()
 
+    
+    # HF retry method for summary client
+    def _safe_hf_call(self, messages, max_tokens=150, retries=3):
+        if not self.summary_client:
+            return None
+
+        for attempt in range(retries):
+            try:
+                return self.summary_client.chat.completions.create(
+                    messages=messages,
+                    max_tokens=max_tokens
+                )
+            except Exception:
+                logger.warning(f"HF call failed (attempt {attempt+1})")
+                time.sleep(2 ** attempt)
+
+        logger.error("HF API failed after retries")
+        return None
+
     # -------------------- CHAT MANAGEMENT --------------------
     
     def _new_chat(self, first_user_message=None):
@@ -163,29 +215,37 @@ class Explain2MePipeline:
     def _generate_chat_title(self, first_message):
         """Generate a chat title"""
         if self.summary_client:
-            messages = [{"role": "user", "content": f"Summarize this into a short 3-7 word title:\n{first_message}"}]
-            response = self.summary_client.chat.completions.create(
-                messages=messages,
-                max_tokens=150
-                )
-            return response.choices[0].message["content"]
+            try:
+                messages = [{"role": "user", "content": f"Summarize this into a short 3-7 word title:\n{first_message}"}]
+                response = self._safe_hf_call(messages)
+
+                if response:
+                    return response.choices[0].message["content"]
+            
+            except Exception:
+                logger.exception("Title generation failed")
         
         return first_message[:25] + ("..." if len(first_message) > 25 else "")
 
     def load_chat(self, chat_id):
-        c = self.conn.cursor()
-        c.execute(
-            "SELECT role, content FROM messages WHERE chat_id=? ORDER BY timestamp",
-            (chat_id,),
+        try:
+            c = self.conn.cursor()
+            c.execute(
+                "SELECT role, content FROM messages WHERE chat_id=? ORDER BY timestamp",
+                (chat_id,),
             )
 
-        messages = [{"role": r, "content": c} for r, c in c.fetchall()]
+            messages = [{"role": r, "content": c} for r, c in c.fetchall()]
 
-        if not messages:
-            raise ValueError(f"No chat found with chat_id={chat_id}")
+            if not messages:
+                raise ValueError(f"No chat found with chat_id={chat_id}")
 
-        self.chat_history = [{"role": "system", "content": self.system_message}] + messages
-        self.current_chat_id = chat_id
+            self.chat_history = [{"role": "system", "content": self.system_message}] + messages
+            self.current_chat_id = chat_id
+
+        except Exception:
+            logger.exception("Failed to load chat")
+            raise
 
     def list_chats(self):
         c = self.conn.cursor()
@@ -228,10 +288,12 @@ class Explain2MePipeline:
             {combined_text}
             """
         messages = [{"role": "user", "content": prompt}]
-        completion = self.summary_client.chat.completions.create(
-            messages=messages,
-            max_tokens=150
-            )
+        completion = self._safe_hf_call(messages)
+
+        if not completion:
+            logger.warning("Skipping summarization due to HF failure")
+            return
+        
         summary = completion.choices[0].message["content"]
 
         # rebuild memory
@@ -281,52 +343,78 @@ class Explain2MePipeline:
 
     # -------------------- GENERATION --------------------
     def _generate_from_messages(self):
-        prompt = self.build_prompt()
+        try:
+            prompt = self.build_prompt()
 
-        inputs = self.tokenizer(prompt, return_tensors="pt").to(self.model.device)
+            inputs = self.tokenizer(prompt, return_tensors="pt").to(self.model.device)
 
-        with torch.no_grad():
-            outputs = self.model.generate(
-                **inputs,
-                max_new_tokens=self.max_new_tokens,
-                do_sample=True,
-                temperature=self.temperature,
-            )
+            with torch.no_grad():
+                outputs = self.model.generate(
+                    **inputs,
+                    max_new_tokens=self.max_new_tokens,
+                    do_sample=True,
+                    temperature=self.temperature,
+                )
 
-        generated_tokens = outputs[0][inputs["input_ids"].shape[-1]:]
-        return self.tokenizer.decode(generated_tokens, skip_special_tokens=True)
+            generated_tokens = outputs[0][inputs["input_ids"].shape[-1]:]
+            reply = self.tokenizer.decode(generated_tokens, skip_special_tokens=True)
 
-    
-    def generate(self, user_prompt, is_new_chat=False):
+            logger.info("Response generated successfully")
+            return reply
+
+        except Exception:
+            logger.exception("Generation failed")
+            return "Sorry, something went wrong while generating a response."
+
+
+    def generate(self, user_prompt: str, is_new_chat: bool = False):
         """
         Generate a reply to `user_prompt`.
         If is_new_chat=True, start a new chat and generate a title.
         """
-        if self.current_chat_id is None or is_new_chat:
-            # Start a new chat and generate a title
-            self._new_chat(first_user_message=user_prompt)
+        # input validation
+        if not isinstance(user_prompt, str):
+            return "Invalid input type."
 
-        # Append user message
-        self.chat_history.append({"role": "user", "content": user_prompt})
-        self._store_message("user", user_prompt)
+        user_prompt = user_prompt.strip()
 
-        # Generate assistant reply
-        reply = self._generate_from_messages()
+        if not user_prompt:
+            return "Please enter a message."
 
-        # Append assistant reply to chat history and store in DB
-        self.chat_history.append({"role": "assistant", "content": reply})
-        self._store_message("assistant", reply)
+        if len(user_prompt) > 5000:
+            return "Message too long. Shorten it."
 
-        return reply
+        try:
+            if self.current_chat_id is None or is_new_chat:
+                self._new_chat(first_user_message=user_prompt)
+
+            self.chat_history.append({"role": "user", "content": user_prompt})
+            self._store_message("user", user_prompt)
+
+            reply = self._generate_from_messages()
+
+            self.chat_history.append({"role": "assistant", "content": reply})
+            self._store_message("assistant", reply)
+
+            return reply
+
+        except Exception:
+            logger.exception("Chat generation failed")
+            return "Something went wrong. Please try again."
 
     # -------------------- DB WRITE --------------------
     def _store_message(self, role, content):
         if self.current_chat_id is None:
-            raise RuntimeError("No active chat.")
+            logger.error("Attempted to store message, but no active chat id")
+            return
 
-        c = self.conn.cursor()
-        c.execute(
-            "INSERT INTO messages (chat_id, role, content) VALUES (?, ?, ?)",
-            (self.current_chat_id, role, content),
-        )
-        self.conn.commit()
+        try:
+            c = self.conn.cursor()
+            c.execute(
+                "INSERT INTO messages (chat_id, role, content) VALUES (?, ?, ?)",
+                (self.current_chat_id, role, content),
+            )
+            self.conn.commit()
+
+        except Exception:
+            logger.exception("Writing message in DB failed")

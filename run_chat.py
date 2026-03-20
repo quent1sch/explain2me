@@ -1,6 +1,13 @@
 """
 run_chat.py
-Run Explain2MePipeline interactively, works in Colab or locally.
+
+Entry point for running the Explain2MePipeline in an interactive CLI session.
+
+This script:
+- Loads configuration files for inference and training
+- Initializes the chat pipeline with optional Hugging Face credentials
+- Provides a simple terminal-based chat interface
+- Handles basic input/output and graceful error handling
 """
 
 import sys
@@ -53,12 +60,14 @@ while True:
     try:
         user_input = input("You: ")
     except EOFError:
-        # handles Colab cell end gracefully
         break
 
     if user_input.lower() in ["exit", "quit"]:
         print("Exiting chat...")
         break
 
-    response = pipeline.generate(user_input)
-    print(f"Assistant: {response}\n")
+    try:
+        response = pipeline.generate(user_input)
+        print(f"Assistant: {response}\n")
+    except Exception:
+        print("Assistant: Something went wrong.\n")
