@@ -23,13 +23,20 @@ import logging
 import time
 
 # -------------------- LOGGING --------------------
+# set log folder path at repo root and create it if needed
+log_folder = Path(__file__).resolve().parent.parent / "logs"
+log_folder.mkdir(parents=True, exist_ok=True)
+
+log_file = log_folder / "chat_pipeline.log"
+
 logging.basicConfig(
     level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s"
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    filename=str(log_file), # find it in log folder
+    filemode="a", # append to file
 )
 
 logger = logging.getLogger("Explain2Me")
-
 
 
 # -------------------- EXPLAIN2ME CLASS --------------------
@@ -373,7 +380,7 @@ class Explain2MePipeline:
         If is_new_chat=True, start a new chat and generate a title.
         """
         # input validation
-        if not isinstance(user_prompt, str):
+        if not isinstance(user_prompt, str) or not isinstance(is_new_chat, bool):
             return "Invalid input type."
 
         user_prompt = user_prompt.strip()
