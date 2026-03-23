@@ -48,6 +48,8 @@ OUTPUTS
 """
 
 import os
+from pathlib import Path
+from dotenv import load_dotenv
 import json
 import numpy as np
 from rouge_score import rouge_scorer
@@ -55,24 +57,42 @@ import bert_score
 import textstat
 from tqdm import tqdm
 
+
+load_dotenv()
+
+BASE_DIR = Path(__file__).resolve().parent
+
 # ---------------------------
 # CONFIG
 # ---------------------------
 
-EVAL_OUTPUT_DIR = "training_pipeline/evaluation/evaluation_results"
-GENERATED_OUTPUT_PATH = "training_pipeline/evaluation/evaluation_results/generate_outputs.json"
+# get config paths from .env
+eval_output_dir = Path(os.getenv("EVAL_OUTPUT_DIR"))
+generated_output_path = Path(os.getenv("GENERATED_OUTPUT_PATH"))
 
-PER_SAMPLE_FILE = os.path.join(EVAL_OUTPUT_DIR, "eval_lora_per_sample.json")
-SUMMARY_FILE = os.path.join(EVAL_OUTPUT_DIR, "eval_lora_summary.json")
+# Resolve relative paths
+if not eval_output_dir.is_absolute():
+    eval_output_dir = BASE_DIR / eval_output_dir
 
-os.makedirs(EVAL_OUTPUT_DIR, exist_ok=True)
+if not generated_output_path.is_absolute():
+    generated_output_path = BASE_DIR / generated_output_path
+
+eval_output_dir = eval_output_dir.resolve()
+generated_output_path = generated_output_path.resolve()
+
+# Derived paths
+per_sample_file = eval_output_dir / "eval_lora_per_sample.json"
+summary_file = eval_output_dir / "eval_lora_summary.json"
+
+# Ensure directory exists
+eval_output_dir.mkdir(parents=True, exist_ok=True)
 
 # ---------------------------
 # LOAD DATA
 # ---------------------------
 
 # retrieve generated outputs from base & lora models - To be used for evaluation
-with open(GENERATED_OUTPUT_PATH, "r") as f:
+with generated_output_path.open("r") as f:
     eval_inputs = json.load(f)
 
 # ---------------------------
@@ -202,7 +222,7 @@ for i, sample in enumerate(tqdm(eval_inputs)):
 # SAVE PER-SAMPLE METRICS
 # ---------------------------
 
-with open(PER_SAMPLE_FILE, "w") as f:
+with per_sample_file.open("w") as f:
     json.dump(per_sample_results, f, indent=2)
 
 # ---------------------------
@@ -254,10 +274,10 @@ for metric in metrics:
 # SAVE SUMMARY
 # ---------------------------
 
-with open(SUMMARY_FILE, "w") as f:
+with summary_file.open("w") as f:
     json.dump(summary, f, indent=2)
 
-print(f"Summary metrics saved to: {SUMMARY_FILE}")
+print(f"Summary metrics saved to: {summary_file}")
 
 # ---------------------------
 # PRINT SUMMARY

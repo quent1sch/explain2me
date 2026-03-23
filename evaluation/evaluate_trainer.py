@@ -23,6 +23,7 @@ pre-tokenized inputs (`input_ids`, `attention_mask`) for batching.
 """
 
 import os
+from pathlib import Path
 import torch
 import yaml
 import wandb
@@ -30,6 +31,7 @@ from datasets import load_dataset
 from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig, TrainingArguments
 from peft import PeftModel
 from trl import SFTTrainer
+from dotenv import load_dotenv
 
 
 # ---------------------------
@@ -37,9 +39,20 @@ from trl import SFTTrainer
 # ---------------------------
 
 # Load config
-config_path = os.path.join(os.path.dirname(__file__), "..", "config.yaml")
-with open(config_path, "r") as f:
+load_dotenv()
+
+BASE_DIR = Path(__file__).resolve().parent
+
+config_path = Path(os.getenv("CONFIG_PATH"))
+
+if not config_path.is_absolute():
+    config_path = BASE_DIR / config_path
+
+config_path = config_path.resolve()
+
+with config_path.open("r") as f:
     config = yaml.safe_load(f)
+
 
 # Model & LoRA
 model_id = config["model_id"]

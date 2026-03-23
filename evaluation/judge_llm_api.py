@@ -28,39 +28,63 @@ This approach provides a decent lightweight, though meaningful,
 pipeline.
 """
 
+from pathlib import Path
 import os
 import yaml
 import json
 from tqdm import tqdm
 from huggingface_hub import InferenceClient
+from dotenv import load_dotenv
 
 # ---------------------------
-# GET CONFIG
+# ENV / CONFIG
 # ---------------------------
 
-config_path = os.path.join(os.path.dirname(__file__), "..", "config.yaml")
-with open(config_path, "r") as f:
+load_dotenv()
+
+BASE_DIR = Path(__file__).resolve().parent
+
+# Config path
+config_path = Path(os.getenv("CONFIG_PATH"))
+if not config_path.is_absolute():
+    config_path = BASE_DIR / config_path
+config_path = config_path.resolve()
+
+with config_path.open("r") as f:
     config = yaml.safe_load(f)
 
+# Evaluation output directory
+eval_dir = Path(os.getenv("EVAL_OUTPUT_DIR", "evaluation/evaluation_results"))
+if not eval_dir.is_absolute():
+    eval_dir = BASE_DIR / eval_dir
+eval_dir = eval_dir.resolve()
+eval_dir.mkdir(parents=True, exist_ok=True)
+
+# ---------------------------
+# FILE PATHS
+# ---------------------------
+
+INPUT_FILE = eval_dir / "generate_outputs.json"
+OUTPUT_SCORE = eval_dir / "judge_scores.json"
+OUTPUT_SUMMARY = eval_dir / "judge_summary.json"
+
+# Hugging Face token
+HF_TOKEN = os.getenv("HF_TOKEN")
+if not HF_TOKEN:
+    raise ValueError("HF_TOKEN not found in environment variables")
+
+# LLM model for judging
 model_id = config["llm_as_a_judge"]["model_id"]
 
-INPUT_FILE = "training_pipeline/evaluation/evaluation_results/generate_outputs.json" 
-OUTPUT_SCORE = "training_pipeline/evaluation/evaluation_results/judge_scores.json"
-OUTPUT_SUMMARY = "training_pipeline/evaluation/evaluation_results/judge_summary.json"
-
-HF_TOKEN = os.getenv("HF_TOKEN")
-
-
 # ---------------------------
-# LOAD DATA
+# LOAD GENERATED OUTPUTS
 # ---------------------------
 
-with open(INPUT_FILE, "r") as f:
+with INPUT_FILE.open("r", encoding="utf-8") as f:
     samples = json.load(f)
 
-
 # ---------------------------
-# INIT CLIENT
+# INIT HF INFERENCE CLIENT
 # ---------------------------
 
 client = InferenceClient(
@@ -160,9 +184,7 @@ for sample in tqdm(samples):
 # SAVE RAW RESULTS
 # ---------------------------
 
-os.makedirs("evaluation", exist_ok=True)
-
-with open(OUTPUT_SCORE, "w") as f:
+with OUTPUT_SCORE.open("w", encoding="utf-8") as f:
     json.dump(results, f, indent=2)
 
 
@@ -186,7 +208,7 @@ for m in metrics:
     summary["lora"][m] = sum(lora_vals) / len(lora_vals) if lora_vals else None
 
 
-with open(OUTPUT_SUMMARY, "w") as f:
+with OUTPUT_SUMMARY.open("w", encoding="utf-8") as f:
     json.dump(summary, f, indent=2)
 
 

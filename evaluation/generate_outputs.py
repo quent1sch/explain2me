@@ -17,6 +17,7 @@ This ensures a fair side-by-side comparison for downstream evaluation.
 """
 
 import os
+from pathlib import Path
 import json
 import yaml
 from tqdm import tqdm
@@ -24,30 +25,50 @@ import torch
 from datasets import load_dataset
 from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
 from peft import PeftModel
+from dotenv import load_dotenv
 
 # ---------------------------
-# GET CONFIG
+# ENV / CONFIG
 # ---------------------------
 
-# BASE
-config_path = os.path.join(os.path.dirname(__file__), "..", "config.yaml")
-with open(config_path, "r") as f:
+load_dotenv()
+
+BASE_DIR = Path(__file__).resolve().parent
+
+# Config path
+config_path = Path(os.getenv("CONFIG_PATH"))
+if not config_path.is_absolute():
+    config_path = BASE_DIR / config_path
+config_path = config_path.resolve()
+
+with config_path.open("r") as f:
     config = yaml.safe_load(f)
 
-# dataset & split
+# Evaluation output directory
+eval_dir = Path(os.getenv("EVAL_OUTPUT_DIR", "evaluation/evaluation_results"))
+if not eval_dir.is_absolute():
+    eval_dir = BASE_DIR / eval_dir
+eval_dir = eval_dir.resolve()
+eval_dir.mkdir(parents=True, exist_ok=True)
+
+# Output file
+OUTPUT_FILE = eval_dir / "generate_outputs.json"
+
+
+# ---------------------------
+# CONFIG VARIABLES
+# ---------------------------
+
 hf_dataset_repo = config["dataset"]["hf_dataset_repo"]
 test_split_ratio = config["dataset"]["test_split_ratio"]
 seed = config["dataset"]["seed"]
 
-# Model & LoRA
 model_id = config["model_id"]
 adapter_id = config["evaluation_trainer"]["adapter_id"]
 
-# SUP.
-NUM_SAMPLES = 10 # keep small
+NUM_SAMPLES = 10  # keep small
 MAX_NEW_TOKENS = 2048
 TEMPERATURE = 0.7
-OUTPUT_FILE = "training_pipeline/evaluation/evaluation_results/generate_outputs.json"
 
 # ---------------------------
 # LOAD DATASET (test split)
@@ -126,7 +147,6 @@ def get_content(messages, role):
 # GENERATE OUTPUTS
 # ---------------------------
 
-os.makedirs("evaluation", exist_ok=True)
 outputs = []
 
 for example in tqdm(test_ds.select(range(NUM_SAMPLES))):
@@ -150,10 +170,10 @@ for example in tqdm(test_ds.select(range(NUM_SAMPLES))):
             temperature=TEMPERATURE
         )
         # keep only generated part (not input prompt)
-        generated_tokens = base_outputs[0][inputs["input_ids"].shape[-1]:]
+        base_tokens = base_outputs[0][inputs["input_ids"].shape[-1]:]
 
         # decode generated text (without special tokens)
-        base_text = tokenizer.decode(generated_tokens, skip_special_tokens=True)
+        base_text = tokenizer.decode(base_tokens, skip_special_tokens=True)
 
         # LoRA model
         lora_outputs = lora_model.generate(
@@ -162,8 +182,8 @@ for example in tqdm(test_ds.select(range(NUM_SAMPLES))):
             do_sample=True,
             temperature=TEMPERATURE
         )
-        generated_tokens = lora_outputs[0][inputs["input_ids"].shape[-1]:]
-        lora_text = tokenizer.decode(generated_tokens, skip_special_tokens=True)
+        lora_tokens = lora_outputs[0][inputs["input_ids"].shape[-1]:]
+        lora_text = tokenizer.decode(lora_tokens, skip_special_tokens=True)
 
     outputs.append({
         "question": question,
@@ -176,7 +196,7 @@ for example in tqdm(test_ds.select(range(NUM_SAMPLES))):
 # SAVE OUTPUTS
 # ---------------------------
 
-with open(OUTPUT_FILE, "w") as f:
+with OUTPUT_FILE.open("w", encoding="utf-8") as f:
     json.dump(outputs, f, indent=2)
 
 print(f"Generated {len(outputs)} examples saved to {OUTPUT_FILE}")
