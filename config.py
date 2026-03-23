@@ -86,4 +86,4 @@ class Settings:
             token=Settings.get_hf_token()
         )
 
-        print(f"✅ File pushed successfully to Hugging Face Hub: {Settings.HF_REPO_ID}")
+        print(f"File pushed successfully to Hugging Face Hub: {Settings.HF_REPO_ID}")
