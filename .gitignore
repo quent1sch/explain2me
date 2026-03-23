@@ -232,3 +232,6 @@ venv_explain2me/
 # Untitled
 Untitled-1.ipynb
 
+# eval wandb
+wandb/
+
