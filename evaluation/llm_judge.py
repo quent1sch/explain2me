@@ -51,30 +51,26 @@ load_dotenv()
 class LLMJudge:
     """LLM-as-a-judge evaluation using Hugging Face Inference API."""
 
-    def __init__(self, config_path=None):
-        base_dir = Path(__file__).resolve().parent
+    def __init__(self, config_path, eval_dir):
+        """
+        Args:
+            config_path (str or Path): path to YAML config
+            eval_dir (str or Path): directory where generated_outputs.json lives and where results will be saved
+        """
+        self.config_path = Path(config_path).resolve()
+        self.eval_dir = Path(eval_dir)
+        self.eval_dir.mkdir(parents=True, exist_ok=True)
 
         # Config
-        self.config_path = Path(config_path or os.getenv("CONFIG_PATH", "config.yaml"))
-        if not self.config_path.is_absolute():
-            self.config_path = base_dir / self.config_path
-        self.config_path = self.config_path.resolve()
-
         with self.config_path.open("r") as f:
             self.config = yaml.safe_load(f)
-
-        # Output directory
-        self.eval_dir = Path(os.getenv("EVAL_OUTPUT_DIR", "evaluation/evaluation_results"))
-        if not self.eval_dir.is_absolute():
-            self.eval_dir = base_dir / self.eval_dir
-        self.eval_dir.mkdir(parents=True, exist_ok=True)
 
         # Files
         self.input_file = self.eval_dir / "generated_outputs.json"
         self.output_scores = self.eval_dir / "judge_scores.json"
         self.output_summary = self.eval_dir / "judge_summary.json"
 
-        # HF client
+        # Hugging Face token
         hf_token = os.getenv("HF_TOKEN")
         if not hf_token:
             raise ValueError("HF_TOKEN not found in environment variables")
@@ -89,33 +85,33 @@ class LLMJudge:
     @staticmethod
     def _build_prompt(prompt, reference, output):
         return f"""
-                You are evaluating explanations produced by an AI tutor.
+You are evaluating explanations produced by an AI tutor.
 
-                User request:
-                {prompt}
+User request:
+{prompt}
 
-                Benchmark explanation:
-                {reference}
+Benchmark explanation:
+{reference}
 
-                Generated explanation:
-                {output}
+Generated explanation:
+{output}
 
-                Score from 1 (poor) to 5 (excellent):
+Score from 1 (poor) to 5 (excellent):
 
-                1. Faithfulness to the concept
-                2. Simplicity for the intended user
-                3. Clarity and structure
-                4. Overall explanation quality
+1. Faithfulness to the concept
+2. Simplicity for the intended user
+3. Clarity and structure
+4. Overall explanation quality
 
-                Return ONLY JSON:
+Return ONLY JSON:
 
-                {{
-                "faithfulness": int,
-                "simplicity": int,
-                "clarity": int,
-                "overall": int
-                }}
-                """
+{{
+ "faithfulness": int,
+ "simplicity": int,
+ "clarity": int,
+ "overall": int
+}}
+"""
 
     def _judge_output(self, prompt, reference, output):
         judge_prompt = self._build_prompt(prompt, reference, output)
@@ -150,19 +146,16 @@ class LLMJudge:
 
         print("Running LLM judge...")
         for sample in tqdm(samples):
-
             base_scores = self._judge_output(
                 sample["question"],
                 sample["reference"],
                 sample["base_output"]
             )
-
             lora_scores = self._judge_output(
                 sample["question"],
                 sample["reference"],
                 sample["lora_output"]
             )
-
             results.append({
                 "base": base_scores,
                 "lora": lora_scores
@@ -172,7 +165,7 @@ class LLMJudge:
         with self.output_scores.open("w", encoding="utf-8") as f:
             json.dump(results, f, indent=2)
 
-        # Summary
+        # Compute summary
         metrics = ["faithfulness", "simplicity", "clarity", "overall"]
         summary = {"base": {}, "lora": {}}
 

@@ -78,13 +78,20 @@ load_dotenv()
 
 
 def resolve_path(path_str, base_dir):
+    if path_str is None:
+        return None
     path = Path(path_str)
     return path if path.is_absolute() else base_dir / path
 
 
 def run_generate(base_dir):
     config_path = resolve_path(os.getenv("CONFIG_PATH"), base_dir)
-    generator = OutputGenerator(config_path=config_path)
+    eval_output_dir = resolve_path(os.getenv("EVAL_OUTPUT_DIR"), base_dir)
+
+    generator = OutputGenerator(
+        config_path=config_path,
+        eval_dir=eval_output_dir
+    )
     generator.run()
 
 
@@ -100,8 +107,12 @@ def run_lora(base_dir):
 
 def run_judge(base_dir):
     config_path = resolve_path(os.getenv("CONFIG_PATH"), base_dir)
+    eval_output_dir = resolve_path(os.getenv("EVAL_OUTPUT_DIR"), base_dir)
 
-    judge = LLMJudge(config_path=config_path)
+    judge = LLMJudge(
+        config_path=config_path,
+        eval_dir=eval_output_dir
+    )
     summary = judge.run()
 
     print("\nLLM Judge Summary:\n", summary)
@@ -113,6 +124,10 @@ def run_trainer(base_dir):
     trainer = TrainerMetrics(config_path=config_path)
     trainer.run()
 
+
+# ---------------------------
+# CLI
+# ---------------------------
 
 def main():
     parser = argparse.ArgumentParser()

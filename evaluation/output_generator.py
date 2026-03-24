@@ -48,27 +48,26 @@ load_dotenv()
 class OutputGenerator:
     """Generate outputs for base and LoRA models."""
 
-    def __init__(self, config_path=None, num_samples=10):
-        base_dir = Path(__file__).resolve().parent
-
-        # Config
-        self.config_path = Path(config_path or os.getenv("CONFIG_PATH", "config.yaml"))
-        if not self.config_path.is_absolute():
-            self.config_path = base_dir / self.config_path
-        self.config_path = self.config_path.resolve()
+    def __init__(self, config_path, eval_dir, num_samples=10):
+        # ---------------------------
+        # CONFIG
+        # ---------------------------
+        self.config_path = Path(config_path).resolve()
 
         with self.config_path.open("r") as f:
             self.config = yaml.safe_load(f)
 
-        # Output directory
-        self.eval_dir = Path(os.getenv("EVAL_OUTPUT_DIR", "evaluation/evaluation_results"))
-        if not self.eval_dir.is_absolute():
-            self.eval_dir = base_dir / self.eval_dir
+        # ---------------------------
+        # OUTPUT DIR (passed from main)
+        # ---------------------------
+        self.eval_dir = Path(eval_dir)
         self.eval_dir.mkdir(parents=True, exist_ok=True)
 
         self.output_file = self.eval_dir / "generated_outputs.json"
 
-        # Config values
+        # ---------------------------
+        # CONFIG VALUES
+        # ---------------------------
         self.model_id = self.config["model_id"]
         self.adapter_id = self.config["evaluation_trainer"]["adapter_id"]
 
@@ -82,6 +81,9 @@ class OutputGenerator:
 
         self.device_map = "auto" if torch.cuda.is_available() else {"": "cpu"}
 
+    # ---------------------------
+    # DATA
+    # ---------------------------
     def _load_dataset(self):
         dataset = load_dataset(self.dataset_repo, split="train")
 
@@ -95,12 +97,13 @@ class OutputGenerator:
 
         self.test_ds = train_test["test"]
 
+    # ---------------------------
+    # MODELS
+    # ---------------------------
     def _load_models(self):
-        # Tokenizer
         self.tokenizer = AutoTokenizer.from_pretrained(self.model_id)
         self.tokenizer.pad_token = self.tokenizer.eos_token
 
-        # Quantization
         bnb_config = BitsAndBytesConfig(
             load_in_4bit=True,
             bnb_4bit_quant_type="nf4",
@@ -108,7 +111,6 @@ class OutputGenerator:
             bnb_4bit_use_double_quant=True,
         )
 
-        # Base model
         self.base_model = AutoModelForCausalLM.from_pretrained(
             self.model_id,
             quantization_config=bnb_config,
@@ -116,13 +118,15 @@ class OutputGenerator:
         )
         self.base_model.eval()
 
-        # LoRA model
         self.lora_model = PeftModel.from_pretrained(
             self.base_model,
             self.adapter_id
         )
         self.lora_model.eval()
 
+    # ---------------------------
+    # PROMPT UTILS
+    # ---------------------------
     def _build_prompt(self, messages):
         non_assistant_msgs = [m for m in messages if m["role"] != "assistant"]
 
@@ -136,8 +140,10 @@ class OutputGenerator:
     def _get_content(messages, role):
         return next(m["content"] for m in messages if m["role"] == role)
 
+    # ---------------------------
+    # RUN
+    # ---------------------------
     def run(self):
-        """Generate outputs and save to JSON."""
         print("Loading dataset...")
         self._load_dataset()
 
@@ -158,20 +164,17 @@ class OutputGenerator:
             inputs = self.tokenizer(prompt, return_tensors="pt").to(self.base_model.device)
 
             with torch.no_grad():
-                # Base
+                # Base model
                 base_out = self.base_model.generate(
                     **inputs,
                     max_new_tokens=self.max_new_tokens,
                     do_sample=True,
                     temperature=self.temperature
                 )
-                # keep only generated part (not input prompt)
                 base_tokens = base_out[0][inputs["input_ids"].shape[-1]:]
-
-                # decode generated text (without special tokens)
                 base_text = self.tokenizer.decode(base_tokens, skip_special_tokens=True)
 
-                # LoRA
+                # LoRA model
                 lora_out = self.lora_model.generate(
                     **inputs,
                     max_new_tokens=self.max_new_tokens,
