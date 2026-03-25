@@ -1,5 +1,5 @@
 '''
-main_chat.py
+main_chat_cli.py
 
 Unified entry point for interactive chat workflows in the Explain2Me project.
 
@@ -17,7 +17,7 @@ WORKFLOW
 Typical chat session workflow:
 
     1. Launch interactive chat
-        → python main_chat.py --mode chat
+        → python main_chat_cli.py --mode chat
 
     2. Input queries in the terminal
         → You: <your question>
@@ -58,7 +58,7 @@ EXAMPLE
 -------
 Run the interactive chat session:
 
-    python main_chat.py --mode chat
+    python main_chat_cli.py --mode chat
 
 Type your questions and receive explanations in real-time.
 Type 'exit' or 'quit' to terminate the session.
