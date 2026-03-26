@@ -1,4 +1,14 @@
-# ------- IMPORT LIBRARIES -------
+"""
+backfill.py
+
+Checks the database for Wikipedia pages missing simple or technical counterparts
+and attempts to construct and scrape the missing versions. Updates the DB with
+newly retrieved content.
+
+Purpose:
+- Ensures as many concepts as possible have multiple difficulty levels (simple vs technical),
+  which helps the model learn to explain the same concept to different audiences.
+"""
 
 from typing import List, Optional
 import sqlite3

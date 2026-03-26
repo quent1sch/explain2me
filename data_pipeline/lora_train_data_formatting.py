@@ -1,3 +1,23 @@
+"""
+lora_train_data_formatting.py
+
+Builds instruction-style training datasets for LoRA fine-tuning from
+existing Wikipedia definitions (simple, technical, and kids).
+
+Purpose:
+- Converts database content into a chat-style format with system, user,
+  and assistant roles.
+- Generates user prompts conditioned on audience (age, education, expertise).
+- Cleans and formats content for assistant responses.
+
+Functionality:
+- Fetches definitions from the DB
+- Generates context-aware user prompts for different difficulty levels
+- Cleans technical/simple content and structures it for training
+- Constructs final LoRA training dataset and saves it as JSON
+"""
+
+
 import sqlite3
 import random
 from typing import List, Dict

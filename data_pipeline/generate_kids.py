@@ -1,4 +1,20 @@
-# ------- IMPORT LIBRARIES -------
+"""
+generate_kids.py
+
+Generates child-friendly ("kids") definitions for Wikipedia pages in the database
+using an LLM. Each definition is written for approximately 10-year-old readers,
+simplifying technical or normal content into clear, easy-to-understand explanations.
+
+Purpose:
+- Provides multi-difficulty training data (simple vs kids) for LoRA fine-tuning.
+- Helps the model learn to explain the same concept differently depending on the audience.
+
+Functionality:
+- Fetches pages missing kids definitions from the DB
+- Generates explanations using LLM with per-page exponential backoff
+- Stores results immediately in the database
+- Supports parallel processing and batch-level retries for robustness
+"""
 
 from concurrent.futures import ThreadPoolExecutor
 import time
