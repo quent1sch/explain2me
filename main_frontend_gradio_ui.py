@@ -54,6 +54,7 @@ Notes / Recommendations:
 
 import gradio as gr
 import requests
+import time
 
 API_URL = "http://127.0.0.1:8000"
 
@@ -79,20 +80,6 @@ def load_chat(chat_label):
 
     return history
 
-
-def chat_fn(message, history):
-    res = requests.post(f"{API_URL}/chat", json={"text": message})
-    reply = res.json()["response"]
-
-    if history is None:
-        history = []
-
-    history.append({"role": "user", "content": message})
-    history.append({"role": "assistant", "content": reply})
-
-    return "", history
-
-
 def new_chat():
     requests.post(f"{API_URL}/reset")
     return []
@@ -103,13 +90,41 @@ def refresh_chats():
     chats_map = fetch_chats()
     return gr.update(choices=list(chats_map.keys()))
 
+def stop_generation():
+    requests.post(f"{API_URL}/stop")
+
+
+def chat_stream_fn(message, history):
+    if history is None:
+        history = []
+
+    history.append({"role": "user", "content": message})
+    assistant_msg = ""
+    history.append({"role": "assistant", "content": assistant_msg})
+
+    counter = 0
+
+    # Call streaming API
+    with requests.post(f"{API_URL}/chat_stream", json={"text": message}, stream=True) as r:
+        for chunk in r.iter_lines(decode_unicode=True):
+            if chunk:
+                assistant_msg += chunk
+                history[-1]["content"] = assistant_msg
+
+                counter += 1
+                if counter % 3 == 0: 
+                    yield "", history # Gradio expects generator yielding outputs
+
+    # final update to ensure full text display
+    yield "", history
+
 
 # ----------------- INITIAL LOAD -----------------
 chats_map = fetch_chats()
 
 # ----------------- UI -----------------
 with gr.Blocks() as demo:
-    gr.Markdown("# Explain2Me Chat")
+    gr.Markdown("# Explain2Me Chat - Streaming Version")
 
     with gr.Row():
         dropdown = gr.Dropdown(
@@ -123,16 +138,18 @@ with gr.Blocks() as demo:
 
     with gr.Row():
         send = gr.Button("Send")
+        stop_btn = gr.Button("Stop")
         new_btn = gr.Button("New Chat")
 
     # -------- EVENTS --------
     dropdown.change(load_chat, inputs=[dropdown], outputs=[chatbot])
 
-    send.click(chat_fn, inputs=[msg, chatbot], outputs=[msg, chatbot])
-    msg.submit(chat_fn, inputs=[msg, chatbot], outputs=[msg, chatbot])
+    send.click(chat_stream_fn, inputs=[msg, chatbot], outputs=[msg, chatbot])
+    msg.submit(chat_stream_fn, inputs=[msg, chatbot], outputs=[msg, chatbot])
 
+    stop_btn.click(stop_generation)
+    
     new_btn.click(new_chat, outputs=[chatbot])
-
     refresh_btn.click(refresh_chats, outputs=[dropdown])
 
 # ----------------- LAUNCH -----------------

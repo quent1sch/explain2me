@@ -118,7 +118,7 @@ def run_chat(base_dir):
             break
 
         try:
-            response = pipeline.generate(user_input)
+            response = pipeline.generate(user_input, streaming=False)
             print(f"Assistant: {response}\n")
         except Exception:
             print("Assistant: Something went wrong.\n")

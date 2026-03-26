@@ -50,6 +50,7 @@ Notes:
 """
 
 from fastapi import FastAPI
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from pathlib import Path
 import yaml, os
@@ -89,6 +90,31 @@ def chat(q: Query):
         q.new_chat = True
     reply = pipeline.generate(q.text, is_new_chat=q.new_chat)
     return {"response": reply}
+
+
+# ----------------- STREAMING CHAT -----------------
+@app.post("/chat_stream")
+def chat_stream(q: Query):
+    """
+    Stream assistant reply using TextIteratorStreamer
+    """
+    if pipeline.current_chat_id is None:
+        q.new_chat = True
+
+    def event_generator():
+        try:
+            # generate() is now a generator when streaming=True
+            for token in pipeline.generate(q.text, is_new_chat=q.new_chat, streaming=True):
+                yield token
+        except Exception:
+            yield "Error generating response."
+
+    return StreamingResponse(event_generator(), media_type="text/plain")
+
+@app.post("/stop")
+def stop():
+    pipeline.stop_generation = True
+    return {"status": "stopped"}
 
 
 @app.post("/reset")

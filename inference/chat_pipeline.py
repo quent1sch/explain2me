@@ -15,12 +15,13 @@ This module handles:
 from pathlib import Path
 import yaml
 import torch
-from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
+from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig, TextIteratorStreamer
 from peft import PeftModel
 import sqlite3
 from huggingface_hub import InferenceClient
 import logging
 import time
+import threading
 
 # -------------------- LOGGING --------------------
 # set log folder path at repo root and create it if needed
@@ -63,6 +64,7 @@ class Explain2MePipeline:
         self.summary_threshold = summary_threshold
         self.max_recent_messages = max_recent_messages
         self.summary_model = summary_model or "Qwen/Qwen2.5-7B-Instruct"
+        self.stop_generation = False
 
         # Resolve db_path relative to the class file
         db_path = Path(db_path)
@@ -349,65 +351,127 @@ class Explain2MePipeline:
         )
 
     # -------------------- GENERATION --------------------
-    def _generate_from_messages(self):
+    
+    def _generate_from_messages(self, streaming: bool = False):
+        """
+        - streaming=False → returns full string
+        - streaming=True → yields tokens using TextIteratorStreamer
+        """
         try:
             prompt = self.build_prompt()
-
             inputs = self.tokenizer(prompt, return_tensors="pt").to(self.model.device)
 
-            with torch.no_grad():
-                outputs = self.model.generate(
-                    **inputs,
-                    max_new_tokens=self.max_new_tokens,
-                    do_sample=True,
-                    temperature=self.temperature,
-                )
+            if not streaming:
+                with torch.no_grad():
+                    outputs = self.model.generate(
+                        **inputs,
+                        max_new_tokens=self.max_new_tokens,
+                        do_sample=True,
+                        temperature=self.temperature,
+                    )
 
-            generated_tokens = outputs[0][inputs["input_ids"].shape[-1]:]
-            reply = self.tokenizer.decode(generated_tokens, skip_special_tokens=True)
+                generated_tokens = outputs[0][inputs["input_ids"].shape[-1]:]
+                return self.tokenizer.decode(generated_tokens, skip_special_tokens=True)
 
-            logger.info("Response generated successfully")
-            return reply
+            # ---------------- STREAMING ----------------
+            streamer = TextIteratorStreamer(
+                self.tokenizer,
+                skip_prompt=True,
+                skip_special_tokens=True,
+            )
+
+            generation_kwargs = dict(
+                **inputs,
+                max_new_tokens=self.max_new_tokens,
+                do_sample=True,
+                temperature=self.temperature,
+                streamer=streamer,
+            )
+
+            # Run generation in a separate thread
+            thread = threading.Thread(
+                target=self.model.generate,
+                kwargs=generation_kwargs,
+            )
+            thread.start()
+
+            # Yield tokens as they arrive
+            for new_text in streamer:
+                if self.stop_generation:
+                    logger.info("Generation stopped by user")
+                    break
+                yield new_text
+
+            thread.join()
 
         except Exception:
             logger.exception("Generation failed")
-            return "Sorry, something went wrong while generating a response."
+            if streaming:
+                yield "Sorry, something went wrong while generating a response."
+            else:
+                return "Sorry, something went wrong while generating a response."
 
 
-    def generate(self, user_prompt: str, is_new_chat: bool = False):
+    
+    def generate(self, user_prompt: str, is_new_chat: bool = False, streaming: bool = False):
         """
         Generate a reply to `user_prompt`.
-        If is_new_chat=True, start a new chat and generate a title.
+        - If streaming=False: returns full text.
+        - If streaming=True: yields tokens using TextIteratorStreamer
         """
-        # input validation
+        # Input validation
         if not isinstance(user_prompt, str) or not isinstance(is_new_chat, bool):
             return "Invalid input type."
 
         user_prompt = user_prompt.strip()
-
         if not user_prompt:
             return "Please enter a message."
-
         if len(user_prompt) > 5000:
             return "Message too long. Shorten it."
-
+        
         try:
+            self.stop_generation = False
+            # Start new chat if needed
             if self.current_chat_id is None or is_new_chat:
                 self._new_chat(first_user_message=user_prompt)
 
             self.chat_history.append({"role": "user", "content": user_prompt})
             self._store_message("user", user_prompt)
 
-            reply = self._generate_from_messages()
+            if streaming:
+                reply_buffer = ""
 
-            self.chat_history.append({"role": "assistant", "content": reply})
-            self._store_message("assistant", reply)
+                try:
+                    for chunk in self._generate_from_messages(streaming=True):
+                        reply_buffer += chunk
+                        yield chunk  # stream partial output
+                    
+                    if self.stop_generation:
+                        logger.info("Stopped response not fully stored")
 
-            return reply
+                except Exception:
+                    logger.exception("Streaming generation failed")
+                    yield "Something went wrong. Please try again."
+                    return
 
+                self.chat_history.append({"role": "assistant", "content": reply_buffer})
+                self._store_message("assistant", reply_buffer)
+
+            else:
+                reply = self._generate_from_messages(streaming=False)
+                self.chat_history.append({"role": "assistant", "content": reply})
+                self._store_message("assistant", reply)
+                return reply
+        
         except Exception:
             logger.exception("Chat generation failed")
-            return "Something went wrong. Please try again."
+
+            if streaming:
+                yield "Something went wrong. Please try again."
+            else:
+                return "Something went wrong. Please try again."
+
+
 
     # -------------------- DB WRITE --------------------
     def _store_message(self, role, content):
