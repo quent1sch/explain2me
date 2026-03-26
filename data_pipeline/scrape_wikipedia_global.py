@@ -1,4 +1,20 @@
-# ------- IMPORT LIBRARIES -------
+"""
+scrape_wikipedia_global.py
+
+Core Wikipedia scraping framework.
+
+This module handles ingestion of Wikipedia content from a list of URLs
+(pages or categories). It automatically expands category URLs into
+individual pages, filters out already-scraped entries using the database,
+and routes each page to the appropriate scraper (simple or normal Wikipedia).
+
+Scraping is performed in parallel using a thread pool, and results can be
+optionally stored in a SQLite database.
+
+Designed for scalable, fault-tolerant data collection as part of the
+Explain2Me data pipeline.
+"""
+
 
 from concurrent.futures import ThreadPoolExecutor
 from typing import Union, List, Optional

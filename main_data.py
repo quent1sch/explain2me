@@ -1,18 +1,93 @@
-# ------- IMPORT LIBRARIES -------
+"""
+main_data.py
+
+Unified entry point for dataset generation in the Explain2Me project.
+
+This script orchestrates the full data pipeline, from scraping raw Wikipedia
+content to producing a structured LoRA training dataset with multi-level
+explanations (simple, normal, technical).
+
+STAGES
+------
+- scrape   : Collect Wikipedia pages (supports both single pages and categories)
+- backfill : Enrich dataset by retrieving missing simple/normal counterparts
+- generate : Use an LLM to create kid-friendly (age ~10) explanations
+- format   : Build instruction-style dataset for LoRA fine-tuning
+- save     : Store dataset locally and optionally push to Hugging Face Hub
+
+WORKFLOW
+--------
+Typical data pipeline execution:
+
+    1. Load seed URLs
+        → configurable list of Wikipedia pages or categories
+
+    2. Scrape content
+        → expands category URLs into pages and scrapes in parallel
+
+    3. Backfill missing variants
+        → ensures coverage across difficulty levels
+
+    4. Generate simplified definitions
+        → LLM creates child-friendly explanations
+
+    5. Build training dataset
+        → formats data into instruction-style JSON (system/user/assistant)
+
+OUTPUT
+------
+The final dataset is a JSON file for LoRA instruction tuning, where each sample:
+
+- includes a system prompt defining assistant behavior
+- includes a user prompt with contextual signals (e.g., age, knowledge level)
+- includes an assistant response corresponding to a difficulty level:
+    • simple     (child-friendly)
+    • normal     (general audience)
+    • technical  (expert-level)
+
+DATA SOURCES
+------------
+- Seed URLs are defined in `data_pipeline/wiki_urls`
+- Can be customized to target specific domains (e.g., law, science, history)
+- Wikipedia category URLs are supported and automatically expanded into pages,
+  enabling efficient large-scale data collection
+
+RESULTS
+-------
+- SQLite database populated with scraped and generated content
+- Final LoRA training dataset saved locally
+- Optional upload to Hugging Face Hub via configuration
+
+CONFIGURATION
+-------------
+- Paths, API keys, and parameters are managed via `Settings`
+- Database location, model client, and token limits are configurable
+
+PORTABILITY
+-----------
+- Modular and fault-tolerant pipeline (each stage logs errors and continues)
+- Designed for scalability (parallel scraping + LLM workers)
+- Can be adapted to other data sources or domains with minimal changes
+
+EXAMPLE
+-------
+Run the full data pipeline from the repository root:
+
+    python main_data.py
+"""
+
+
 
 import logging
 import time
 
-from config import Settings
-from data_pipeline.db import init_db
+from data_pipeline.data_config import Settings
 from data_pipeline.backfill import backfill_DB
+from data_pipeline.db import init_db
 from data_pipeline.generate_kids import generate_n_populate_kid_def
 from data_pipeline.scrape_wikipedia_global import scrape_wikipedia
 from data_pipeline.url_loader import load_seed_urls
 from data_pipeline.lora_train_data_formatting import build_lora_training_dataset, save_data
-
-
-
 
 
 
@@ -53,7 +128,7 @@ def main():
 
     except Exception:
         logger.exception("Critical initialization failure")
-        return  # stop program early
+        return
     
 
 

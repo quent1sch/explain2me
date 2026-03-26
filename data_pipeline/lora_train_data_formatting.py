@@ -17,7 +17,7 @@ while not (project_root / "config.py").exists():
 sys.path.append(str(project_root))
 print("Project root:", project_root)
 
-from config import Settings
+from data_pipeline.data_config import Settings
 
 
 SYSTEM_PROMPT = (

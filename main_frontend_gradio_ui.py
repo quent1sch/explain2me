@@ -1,3 +1,57 @@
+"""
+main_frontend_gradio_ui.py
+
+Frontend chat interface using Gradio for Explain2Me.
+
+Responsibilities:
+- Display chat interface similar to ChatGPT
+- Provide chat input box, send button, new chat button
+- Allow switching between multiple chats (dropdown)
+- Refresh chat list from backend
+- Display chat history for selected chat
+- Communicate with backend via FastAPI endpoints
+
+Components:
+------------
+1. Dropdown: select existing chat
+2. Refresh button: reload chat list from backend
+3. Chatbot: display conversation (list of dicts {"role","content"})
+4. Textbox: user message input
+5. Send button: send message
+6. New Chat button: start new conversation
+
+Key Functions:
+--------------
+- fetch_chats(): get chat list from backend
+- load_chat(chat_label): load selected chat + display history
+- chat_fn(message, history): send message to backend + update history
+- new_chat(): reset backend chat state
+- refresh_chats(): refresh dropdown choices
+
+Usage / Workflow:
+-----------------
+1. Start backend first:
+
+    uvicorn main_backend_api:app --reload
+
+2. Start frontend:
+
+    python main_frontend_gradio_ui.py
+
+3. Use UI:
+    - Select chat from dropdown or create new chat
+    - Type message and click Send
+    - Refresh chat list if new chats created elsewhere
+
+Notes / Recommendations:
+------------------------
+- Each message is sent via API to backend; Gradio waits for response
+- Use streaming in future to make CPU responses appear progressively
+- Chat history is restored when switching chats
+- Backend DB is single source of truth (no local cache)
+"""
+
+
 import gradio as gr
 import requests
 
