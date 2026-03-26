@@ -2,6 +2,8 @@ import os
 import torch
 import yaml
 import wandb
+from pathlib import Path
+from dotenv import load_dotenv
 
 from datasets import load_dataset
 from transformers import (
@@ -16,7 +18,21 @@ from huggingface_hub import snapshot_download
 from transformers.trainer_utils import get_last_checkpoint
 from training_helpers import init_wandb
 
+load_dotenv()
 
+# Base directory of this script
+BASE_DIR = Path(__file__).resolve().parent
+
+# Get config path from environment or default to parent folder
+config_path = Path(os.getenv("CONFIG_PATH", "../config.yaml"))
+
+# Make it absolute relative to script location if not absolute
+if not config_path.is_absolute():
+    config_path = (BASE_DIR.parent / config_path).resolve()
+
+# Load YAML config
+with config_path.open("r") as f:
+    config = yaml.safe_load(f)
 
 # ---------- Load Config ----------
 with open("training_pipeline/config.yaml", "r") as f:

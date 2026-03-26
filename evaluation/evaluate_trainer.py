@@ -46,7 +46,7 @@ BASE_DIR = Path(__file__).resolve().parent
 config_path = Path(os.getenv("CONFIG_PATH"))
 
 if not config_path.is_absolute():
-    config_path = BASE_DIR / config_path
+    config_path = BASE_DIR.parent / config_path
 
 config_path = config_path.resolve()
 
