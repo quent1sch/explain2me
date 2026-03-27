@@ -109,7 +109,7 @@ class Explain2MePipeline:
     def from_config(cls, inf_config, train_config, hf_token=None):
         return cls(
             model_id=train_config["model_id"],
-            adapter_id=train_config["hub"]["repo_id"],
+            adapter_id=train_config.get("hub", {}).get("repo_id") or None, # ensure smooth handling if no adapter
 
             # generation
             max_new_tokens=inf_config["generation"]["max_new_tokens"],

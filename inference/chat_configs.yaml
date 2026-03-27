@@ -13,7 +13,7 @@ memory:
   max_recent_messages: 6
 
 summarization:
-  model: Qwen/Qwen2.5-7B-Instruct
+  model: Qwen/Qwen2.5-7B-Instruct #Qwen/Qwen3-4B-Instruct-2507
   max_new_tokens: 150
 
 system_prompt: |

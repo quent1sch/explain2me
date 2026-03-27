@@ -1,70 +1,74 @@
-"""
-main_frontend_gradio_ui.py
+# """
+# main_frontend_gradio_ui.py
 
-Frontend chat interface using Gradio for Explain2Me.
+# Frontend chat interface using Gradio for Explain2Me.
 
-Responsibilities:
-- Display chat interface similar to ChatGPT
-- Provide chat input box, send button, new chat button
-- Allow switching between multiple chats (dropdown)
-- Refresh chat list from backend
-- Display chat history for selected chat
-- Communicate with backend via FastAPI endpoints
+# Responsibilities:
+# - Display chat interface
+# - Provide chat input box, send button, new chat button
+# - Allow switching between multiple chats (dropdown)
+# - Refresh chat list from backend
+# - Display chat history for selected chat
+# - Stream assistant responses in real-time
+# - Communicate with backend via FastAPI endpoints
 
-Components:
-------------
-1. Dropdown: select existing chat
-2. Refresh button: reload chat list from backend
-3. Chatbot: display conversation (list of dicts {"role","content"})
-4. Textbox: user message input
-5. Send button: send message
-6. New Chat button: start new conversation
-7. Stop generation button: stop generation stream
+# Components:
+# ------------
+# 1. Dropdown: select existing chat
+# 2. Refresh button: reload chat list from backend
+# 3. Chatbot: display conversation (list of dicts {"role","content"})
+# 4. Textbox: user message input
+# 5. Send button: send message
+# 6. New Chat button: start new conversation
+# 7. Stop generation button: stop generation stream
 
-Key Functions:
---------------
-- fetch_chats(): get chat list from backend
-- load_chat(chat_label): load selected chat + display history
-- chat_stream_fn(message, history): send message to backend + update history
-- new_chat(): reset backend chat state
-- refresh_chats(): refresh dropdown choices
-- stop_generation(): self explanatory
+# Key Functions:
+# --------------
+# - fetch_chats(): get chat list from backend
+# - load_chat(chat_label): load selected chat + display history
+# - chat_stream_fn(message, history): stream assistant response and update last message in-place
+# - new_chat(): reset backend chat state
+# - refresh_chats(): refresh dropdown choices
+# - stop_generation(): signal backend + frontend to stop streaming
 
-Usage / Workflow:
------------------
-1. Start backend first:
+# Usage / Workflow:
+# -----------------
+# 1. Start backend first:
 
-    uvicorn main_backend_api:app --reload
+#      uvicorn main_backend_api:app --reload
 
-2. Start frontend:
+# 2. Start frontend:
 
-    python main_frontend_gradio_ui.py
+#     python main_frontend_gradio_ui.py
 
-3. Use UI:
-    - Select chat from dropdown or create new chat
-    - Type message and click Send
-    - Refresh chat list if new chats created elsewhere
-    - Stop answer generation stream
-
-Notes:
-------------------------
-- Chat history is restored when switching chats
-- Backend DB is single source of truth (no local cache)
-"""
+# 3. Use UI:
+#     - Select chat from dropdown or create new chat
+#     - Type message and click Send
+#     - Messages stream progressively in the chat window
+#     - Refresh chat list if new chats created elsewhere
+#     - Stop answer generation stream if needed
+# """
 
 
 import gradio as gr
 import requests
-import time
+import threading
 
 API_URL = "http://127.0.0.1:8000"
 
-# ----------------- HELPERS -----------------
+stop_event = threading.Event()
+
+
+# ---------------- CHAT LIST ----------------
 def fetch_chats():
     res = requests.get(f"{API_URL}/chats").json()
     return {f"{c['chat_id']} - {c['title']}": c["chat_id"] for c in res}
 
 
+chats_map = fetch_chats()
+
+
+# ---------------- LOAD CHAT ----------------
 def load_chat(chat_label):
     if not chat_label:
         return []
@@ -81,67 +85,85 @@ def load_chat(chat_label):
 
     return history
 
-def new_chat():
-    requests.post(f"{API_URL}/reset")
 
-    # refresh dropdown so new chats appear later
-    global chats_map
-    chats_map = fetch_chats()
-
-    return [], gr.update(choices=list(chats_map.keys()), value=None)
-
-
+# ---------------- REFRESH CHATS ----------------
 def refresh_chats():
     global chats_map
     chats_map = fetch_chats()
     return gr.update(choices=list(chats_map.keys()))
 
+
+# ---------------- NEW CHAT ----------------
+def new_chat():
+    global chats_map
+    requests.post(f"{API_URL}/reset")
+    chats_map = fetch_chats()
+    return [], gr.update(choices=list(chats_map.keys()), value=None)
+
+
+# ---------------- STOP STREAM ----------------
 def stop_generation():
+    stop_event.set()
     requests.post(f"{API_URL}/stop")
 
 
+# ---------------- STREAM FUNCTION ----------------
 def chat_stream_fn(message, history):
+    stop_event.clear()
+
     if history is None:
         history = []
 
+    # append user message
     history.append({"role": "user", "content": message})
+
+    #add assistant placeholder
+    history.append({"role": "assistant", "content": ""})
+
     assistant_msg = ""
-    history.append({"role": "assistant", "content": assistant_msg})
-    
-    yield "", history # display directly user message
 
-    counter = 0
+    # display directly user message
+    yield "", history
 
-    with requests.post(f"{API_URL}/chat_stream", json={"text": message}, stream=True) as r:
+    with requests.post(
+        f"{API_URL}/chat_stream",
+        json={"text": message},
+        stream=True
+    ) as r:
+
         for chunk in r.iter_lines(decode_unicode=True):
+            if stop_event.is_set():
+                break
+
             if chunk:
                 assistant_msg += chunk
-                history[-1]["content"] = assistant_msg.strip()
 
-                counter += 1
-                if counter % 3 == 0: 
-                    yield "", history # Gradio expects generator yielding outputs
+                # update last assistant message
+                history[-1]["content"] = assistant_msg
 
+                yield "", history # Gradio expects generator yielding outputs
+    
     # final update to ensure full text display
     yield "", history
 
 
-
-# ----------------- INITIAL LOAD -----------------
+# ---------------- INIT ----------------
 chats_map = fetch_chats()
 
-# ----------------- UI -----------------
+
+# ---------------- UI ----------------
 with gr.Blocks() as demo:
     gr.Markdown("# Explain2Me Chat - Streaming Version")
 
     with gr.Row():
         dropdown = gr.Dropdown(
             choices=list(chats_map.keys()),
-            label="Select Chat",
+            label="Select Chat"
         )
         refresh_btn = gr.Button("Refresh")
 
     chatbot = gr.Chatbot(height=400)
+
     msg = gr.Textbox(placeholder="Type your question...")
 
     with gr.Row():
@@ -149,7 +171,7 @@ with gr.Blocks() as demo:
         stop_btn = gr.Button("Stop")
         new_btn = gr.Button("New Chat")
 
-    # -------- EVENTS --------
+    # ---------------- EVENTS ----------------
     dropdown.change(load_chat, inputs=[dropdown], outputs=[chatbot])
 
     send.click(chat_stream_fn, inputs=[msg, chatbot], outputs=[msg, chatbot])
@@ -160,5 +182,6 @@ with gr.Blocks() as demo:
     new_btn.click(new_chat, outputs=[chatbot, dropdown])
     refresh_btn.click(refresh_chats, outputs=[dropdown])
 
-# ----------------- LAUNCH -----------------
+
+# ---------------- RUN ----------------
 demo.launch()

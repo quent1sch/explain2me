@@ -1,13 +1,20 @@
-# Explain2Me: Overview
+# Explain2Me
 
-Explain2Me is an end-to-end ML project that teaches a language model to explain complex concepts in a way that adapts to the user’s background, experience, and context — based solely on how the user phrases their question.
+Explain2Me is an end-to-end NLP system for training and evaluating a **LoRA-adapted language model** that generates explanations tailored to a user’s level (age, education, job) — inferred directly from the input text.
+
+The project covers the full ML lifecycle:
+- data collection and dataset construction
+- instruction tuning with **QLoRA**
+- multi-step evaluation (automatic + LLM-based)
+- inference via API and chat interface
+
+The main focus is **parameter-efficient fine-tuning** and evaluation of the resulting model behavior.
 
 Example input the model sees:
 
 > *“I need to understand what a copula. I am a first-year bachelor student in statistics.”*
 
 The model generates a clear, audience-aware explanation without requiring structured metadata — the user’s question alone guides the style, complexity, and structure of the response.
-
 
 ## Project Objective
 
@@ -21,9 +28,25 @@ The model generates a clear, audience-aware explanation without requiring struct
 
 This is achieved by building a full instruction-based fine-tuning workflow for a language model, leveraging Wikipedia as a structured knowledge source.
 
-## Technical Overview
+---
 
-### Data Pipeline (Completed)
+## Problem
+
+Standard instruction-tuned models generate generic explanations.
+
+Goal:  
+Train a model that adapts **style, complexity, and structure** based only on how the user asks the question.
+
+No explicit metadata (no labels like “beginner” or “expert” at inference time).
+
+---
+
+## Approach
+
+### Data → Training → Evaluation → Inference
+
+
+### 1. Dataset construction (`main_data.py`)
 
 - Scrapes Wikipedia pages to gather raw content
 
@@ -34,116 +57,143 @@ This is achieved by building a full instruction-based fine-tuning workflow for a
 - Produces a dataset ready for supervised LoRA fine-tuning
 
 This transforms encyclopedic knowledge into high-quality, context-aware training data.
+ 
+**Output:**
+- training dataset (JSON)
+- intermediate SQLite DB
 
-### LoRA Fine-Tuning (In Progress)
+---
 
-- Fine-tunes a base instruct model using the generated dataset
+#### 2. LoRA training (`main_lora_train.py`)
 
-- Uses a LoRA adapter for parameter-efficient training
+Implements a full **QLoRA training pipeline**:
 
-- Learns to generate explanations conditioned implicitly on user-provided context
+- base instruct model + 4/8-bit quantization
+- LoRA adapters (parameter-efficient fine-tuning)
+- config-driven training (YAML)
+- dataset splitting (train / val / test)
+- checkpoint resume (Hugging Face Hub)
+- experiment tracking (Weights & Biases)
 
-Currently: the LoRA adapter is being trained to respond appropriately to diverse user questions.
+**Training setup:**
+- supervised fine-tuning on instruction dataset  
+- base model frozen, only adapter weights updated  
+- final adapter pushed to Hugging Face Hub  
 
-### Inference Pipeline (Next Step)
-
-- Users will input natural questions including their context
-
-- The model generates personalized, audience-aware explanations
-
-- Leverages the LoRA adapter to condition output based on phrasing and implied attributes
+**Run:**
+```bash
+python main_lora_train.py --config config.yaml
+```
 
 
-## Projects Key Points
+#### 3. Evaluation (main_evaluation.py)
 
-- End-to-end ML pipeline: data collection → dataset engineering → fine-tuning → inference
+Evaluation is modular and reproducible.
 
-- Instruction-based, chat-style dataset creation
+##### Step 1 — Generate outputs
 
-- Parameter-efficient adaptation using LoRA
+```bash
+python main_evaluation.py --mode generate
+```
 
-- Demonstrates applied skills in NLP, LLM adaptation, and prompt-driven data generation
+##### Step 2 — Local metrics
 
-- Focused on making explanations personalized and accessible
+```bash
+python main_evaluation.py --mode lora
+```
 
-🗂 Project Structure
+- readability scoring
+- ROUGE-L (overlap)
+- BERTScore (semantic similarity)
+
+##### Step 3 — LLM-as-a-judge
+
+```bash
+python main_evaluation.py --mode judge
+```
+
+- external model evaluates explanation quality
+
+
+#### 4. Inference (main_backend_api.py)
+- FastAPI backend
+- streaming generation
+- chat persistence (SQLite)
+- multi-session support
+
+Run (separately):
+```bash
+uvicorn main_backend_api:app --reload
+```
+```bash
+python main_frontend_gradio_ui.py
+```
+
+
+### Project Structure
 ```
 explain2me/
-├── data_pipeline/                 # Core scraping + dataset creation logic
-├── config.py                      # Project settings and paths
-├── main_data.py                   # Entry point to run the data pipeline
-├── requirements.txt               # Python dependencies
+├── data_pipeline/
+├── training_pipeline/
+├── evaluation/
+├── inference/
+├── main_data.py
+├── main_lora_train.py
+├── main_evaluation.py
+├── main_backend_api.py
+├── main_frontend_gradio_ui.py
+├── config.yaml
+├── requirements.txt
 ├── README.md
 └── LICENSE
 ```
 
-## Installation
 
-1. Clone the repository:
 
+## How to run
+#### Setup
 ```bash
 git clone https://github.com/quent1sch/explain2me.git
 cd explain2me
-```
-
-2. Create a virtual environment and activate it:
-
-```bash
-python3 -m venv venv
-source venv/bin/activate   # macOS/Linux
-# or
-venv\Scripts\activate      # Windows
-```
-
-3. Install dependencies:
-
-```bash
+python -m venv venv
+source venv/bin/activate
 pip install -r requirements.txt
 ```
 
-## Configuration
-
-The project uses environment variables for sensitive tokens:
-
-```python
-HF_TOKEN=<your_HF_token>
-OPENAI_API_KEY=<your_OPENAI_key>
-WANDB_TOKEN=<your_wandb_token>
+Set environment variables:
+```bash
+HF_TOKEN=...
+OPENAI_API_KEY=...
+WANDB_TOKEN=...
+CONFIG_PATH=config.yaml
+CHAT_CONFIG_PATH=inference/chat_configs.yaml
+EVAL_OUTPUT_DIR=evaluation/evaluation_results
+GENERATED_OUTPUT_PATH=evaluation/evaluation_results/generate_outputs.json
 ```
 
-Set it in your shell before running.
-
-## Usage
-
-Run the full data pipeline to generate the training dataset:
+#### Full pipeline
+1. Generate dataset
 ```bash
 python main_data.py
 ```
+2. Train LoRA adapter
+```bash
+python main_lora_train.py --config config.yaml
+```
+3. Evaluate
+```bash
+python main_evaluation.py --mode generate
+python main_evaluation.py --mode lora
+python main_evaluation.py --mode judge
+```
+4. Run inference API
+```bash
+uvicorn main_backend_api:app --reload
+```
+```bash
+python main_frontend_gradio_ui.py
+```
 
-This will:
-
-1. Scrape Wikipedia pages from seed URLs
-
-2. Generate simplified, audience-aware explanations via an LLM
-
-3. Format the dataset for LoRA fine-tuning
-
-4. Optionally push the dataset to the Hugging Face Hub
-
-## Output
-
-- Training dataset: training_data.json (chat-style format)
-
-- LoRA adapter: trained weights for fine-tuning the base instruct model
-
-Once the inference pipeline is implemented, users will be able to input natural questions and receive personalized explanations.
-
-## Tips
-
-- Make sure Wikipedia URLs are listed in `data_pipeline/wiki_urls` before running
-
-- Logs progress in `data_pipeline_logs.log` for monitoring pipeline execution
-
-## License
-
-This project is licensed under the Apache-2.0 License — see `LICENSE` for details.
+## Limitations
+- training data partially synthetic (LLM-generated)
+- evaluation relies partly on proxy metrics

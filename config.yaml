@@ -1,4 +1,4 @@
-model_id: meta-llama/Meta-Llama-3.1-8B-Instruct
+model_id: meta-llama/Meta-Llama-3.1-8B-Instruct # or smaller meta-llama/Llama-3.2-1B-Instruct 
 
 training:
   output_dir: ./lora_model
@@ -17,7 +17,7 @@ lora:
   dropout: 0.05
 
 hub:
-  repo_id: quent1sch/llama-3.1-8b-explain2me-lora
+  repo_id: quent1sch/llama-3.1-8b-explain2me-lora # or null for no adapter
   strategy: every_save
 
 wandb:
