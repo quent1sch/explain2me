@@ -378,6 +378,7 @@ class Explain2MePipeline:
                 self.tokenizer,
                 skip_prompt=True,
                 skip_special_tokens=True,
+                clean_up_tokenization_spaces=True,
             )
 
             generation_kwargs = dict(

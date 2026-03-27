@@ -16,6 +16,10 @@ POST /chat
     JSON input: {"text": "message", "new_chat": bool}
     Returns: {"response": "assistant reply"}
 
+POST /chat_stream
+    Stream assistant reply
+    Yields: tokens
+
 POST /reset
     Start a new chat (clears current chat state)
 
@@ -27,6 +31,9 @@ POST /load_chat
     Load a specific chat by chat_id
     Params: chat_id=int
     Returns: {"status": "loaded"}
+
+POST /stop
+    Stop generation
 
 GET /history
     Returns current chat history
@@ -73,7 +80,7 @@ print("Loading model once and for all...")
 pipeline = Explain2MePipeline.from_config(
     inf_config, train_config, hf_token=HF_TOKEN
 )
-print("Model ready!\nNext step: start UI with *python main_chat_gradio.py*")
+print("Model ready!\nNext step: start UI with *python main_frontend_gradio_ui.py*")
 
 # ----------------- API -----------------
 app = FastAPI()
@@ -88,7 +95,7 @@ class Query(BaseModel):
 def chat(q: Query):
     if pipeline.current_chat_id is None:
         q.new_chat = True
-    reply = pipeline.generate(q.text, is_new_chat=q.new_chat)
+    reply = pipeline.generate(q.text, is_new_chat=q.new_chat, streaming=False)
     return {"response": reply}
 
 

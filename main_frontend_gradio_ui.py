@@ -19,14 +19,16 @@ Components:
 4. Textbox: user message input
 5. Send button: send message
 6. New Chat button: start new conversation
+7. Stop generation button: stop generation stream
 
 Key Functions:
 --------------
 - fetch_chats(): get chat list from backend
 - load_chat(chat_label): load selected chat + display history
-- chat_fn(message, history): send message to backend + update history
+- chat_stream_fn(message, history): send message to backend + update history
 - new_chat(): reset backend chat state
 - refresh_chats(): refresh dropdown choices
+- stop_generation(): self explanatory
 
 Usage / Workflow:
 -----------------
@@ -42,11 +44,10 @@ Usage / Workflow:
     - Select chat from dropdown or create new chat
     - Type message and click Send
     - Refresh chat list if new chats created elsewhere
+    - Stop answer generation stream
 
-Notes / Recommendations:
+Notes:
 ------------------------
-- Each message is sent via API to backend; Gradio waits for response
-- Use streaming in future to make CPU responses appear progressively
 - Chat history is restored when switching chats
 - Backend DB is single source of truth (no local cache)
 """
@@ -82,7 +83,12 @@ def load_chat(chat_label):
 
 def new_chat():
     requests.post(f"{API_URL}/reset")
-    return []
+
+    # refresh dropdown so new chats appear later
+    global chats_map
+    chats_map = fetch_chats()
+
+    return [], gr.update(choices=list(chats_map.keys()), value=None)
 
 
 def refresh_chats():
@@ -101,15 +107,16 @@ def chat_stream_fn(message, history):
     history.append({"role": "user", "content": message})
     assistant_msg = ""
     history.append({"role": "assistant", "content": assistant_msg})
+    
+    yield "", history # display directly user message
 
     counter = 0
 
-    # Call streaming API
     with requests.post(f"{API_URL}/chat_stream", json={"text": message}, stream=True) as r:
         for chunk in r.iter_lines(decode_unicode=True):
             if chunk:
                 assistant_msg += chunk
-                history[-1]["content"] = assistant_msg
+                history[-1]["content"] = assistant_msg.strip()
 
                 counter += 1
                 if counter % 3 == 0: 
@@ -117,6 +124,7 @@ def chat_stream_fn(message, history):
 
     # final update to ensure full text display
     yield "", history
+
 
 
 # ----------------- INITIAL LOAD -----------------
@@ -148,8 +156,8 @@ with gr.Blocks() as demo:
     msg.submit(chat_stream_fn, inputs=[msg, chatbot], outputs=[msg, chatbot])
 
     stop_btn.click(stop_generation)
-    
-    new_btn.click(new_chat, outputs=[chatbot])
+
+    new_btn.click(new_chat, outputs=[chatbot, dropdown])
     refresh_btn.click(refresh_chats, outputs=[dropdown])
 
 # ----------------- LAUNCH -----------------
