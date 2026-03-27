@@ -34,7 +34,7 @@ This is achieved by building a full instruction-based fine-tuning workflow for a
 
 Standard instruction-tuned models generate generic explanations.
 
-Goal:  
+##### Goal:  
 Train a model that adapts **style, complexity, and structure** based only on how the user asks the question.
 
 No explicit metadata (no labels like “beginner” or “expert” at inference time).
